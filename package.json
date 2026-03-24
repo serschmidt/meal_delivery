@@ -1,5 +1,11 @@
 {
   "name": "meal_delivery",
+  "eslintConfig": {
+    "rules": {
+      "react-refresh/only-export-components": "off",
+      "@typescript-eslint/no-unused-vars": "warn"
+    }
+  },
   "private": true,
   "version": "0.0.0",
   "type": "module",
