@@ -1,0 +1,71 @@
+- Datenbank
+  -Menü
+    -id, Name, info, url pic.
+  
+  -Client
+    -id, email, passwort, name, surname, address,
+
+Seite:
+- Header:
+  -Logo Suchleiste mittig, Login (bzw. Kundenname), Warenkorb
+    -Klick auf Login: 
+      Dialogbox:
+        -zwei inputs für die Eingabe der Email und Passworts
+        - Login button
+        - Register button
+          -Klick auf das Registerbutton ein Fenster für die Registrierung 
+    -Klick auf den Kundennamen:
+      -Dialogbox:
+        Warenkorb, Bestellungen, Profil
+
+        
+
+-Registrierungsfenster.
+  Button für die Registrierung als Lieferant.
+  input Felder für 
+    -Name, Vorname, Email, Adresse, passwort, passwort bestätigen.
+    -Registrieren Button
+
+Bezahlung:
+  -
+  
+
+
+Projekt Anpassung:
+Customer wird nicht mehr erforderlich, sämtliche Bestellungen sollen als Gast erfolgen.
+Dazu brauchen wir ein Admin:
+er soll nach CRUD die einzelnen Gerichte erstellen bearbeiten,
+nach Krud die WochenÜbersicht erstellen bearbeiten.
+Einzelne Gerichte für den einen bestimmten Tag der Wochenübersicht einstellen und bearbeiten.
+(dazu die Endpoints und den ensprechenden Service)
+für die WochenÜbersicht wird ein Bild benötigt, dass direkt vom Frontend geladen werden soll.
+Schlag bitte vor, wie soll man es am besten tun? ausser direkte Speicherung in der Datenbank (zur zeit wird nur der Link als Bild gespeichert)
+
+Supplier:
+die brauchen eine Überschicht aller bei ihnen gemachten Bestellungen aller Kunden, für die entsprechende Woche.
+für seine eigene ID, darf der Supplier die persönlichen Daten bearbeiten.
+bei der Registrierung bzw. bearbeiten, soll der Supplier seine eigene Bezahlmöglichkeit hinterlegen:
+Also brauchen wir eine weitere Tabelle mit den Bank, die dem Supplier ID verknüpft ist.
+IBAN , Iban nummer
+PayPal, mit PayPal-Link.
+
+Bestellvorgang:
+Die Bestellung soll zunächst als Gast erfolgen.
+Der Kunde soll als erstes einen Lieferanten auswählen.
+sämtliche Gerichte aus dem Warenkorb gehen dann an die Lieferanten ID und dem Entsprechenden Wochen ID.
+die benötigten Daten für die Bestellung soll übertragen werden.
+Wichtig, zusätzlich zu dem Adresse, muss auch eine Lieferadresse aufgenommen werden.
+Bei der Bestellung soll anhand der eindeutigen email-adresse die Kunden ID gesucht werden, und danach diesen Bestellvorgang
+als dieser Kunde prozessiert werden.
+Sollte kein Kunde gefunden werden, dann erst wird ein neuer Kunde mit den Übermittelten daten erstellt.
+die Rechnung soll als eine HTML Email erstellt werden, die dann dem Kunden zugesandt wird.
+
+Als vorlage soll die Seite: https://deliverymonopoly.de/einkaufen/kasse/
+dienen, die allerdings nicht auf den einen Lieferanten beschränkt ist.
+
+Bitte auch noch auf die Plausibilität des gesagten prüfen, evtl. verbesserungen vorschlagen.
+
+
+
+-------------------------------------
+Erscheinungsbild, volle Breite.
