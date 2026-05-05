@@ -10,8 +10,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { useSupplier } from "../contexts/useSupplier";
+import { apiGet } from "../lib/api";
 
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "http://localhost:8000";
 
 type SupplierAddress = {
   id: string;
@@ -31,6 +32,10 @@ type Supplier = {
   address?: SupplierAddress;
 };
 
+type SuppliersResponse = {
+  data: Supplier[];
+};
+
 type SuppliersProps = {
   searchValue: string;
   onSearchChange: (value: string) => void;
@@ -43,16 +48,7 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
   const [error, setError] = useState("");
 
   const loadAllSuppliers = async (signal?: AbortSignal) => {
-    const response = await fetch(`${API_BASE_URL}/api/suppliers/all`, {
-      signal,
-    });
-
-    if (!response.ok) {
-      throw new Error("Supplier konnten nicht geladen werden.");
-    }
-
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
+    return apiGet<Supplier[]>("suppliers/all", undefined, signal);
   };
 
   useEffect(() => {
@@ -64,33 +60,35 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
         setError("");
 
         if (!searchValue.trim()) {
-          const data = await loadAllSuppliers(controller.signal);
+          const data = await apiGet<Supplier[]>(
+            "suppliers/search",
+            { q: searchValue },
+            controller.signal,
+          );
           setSuppliers(data);
           return;
         }
 
         const response = await fetch(
-          `${API_BASE_URL}/api/suppliers/search?q=${encodeURIComponent(searchValue)}`,
+          `${API_BASE_URL}/?route=suppliers/search&q=${encodeURIComponent(searchValue)}`,
           {
             signal: controller.signal,
-          }
+          },
         );
 
         if (!response.ok) {
           throw new Error("Supplier-Suche fehlgeschlagen.");
         }
 
-        const data = await response.json();
-        setSuppliers(Array.isArray(data) ? data : []);
+        const json: SuppliersResponse = await response.json();
+        setSuppliers(Array.isArray(json.data) ? json.data : []);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
 
         setError(
-          err instanceof Error
-            ? err.message
-            : "Fehler bei der Supplier-Suche."
+          err instanceof Error ? err.message : "Fehler bei der Supplier-Suche.",
         );
       } finally {
         setIsLoading(false);
@@ -124,7 +122,7 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Lieferanten suchen..."
-            className="pl-9 h-11"
+            className="pl-9"
             aria-label="Lieferanten suchen"
           />
         </div>
@@ -132,7 +130,8 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
 
       {selectedSupplier && (
         <div className="mb-4 rounded-xl bg-primary/10 px-4 py-3 text-sm">
-          Ausgewählt: <span className="font-medium">{selectedSupplier.fullName}</span>
+          Ausgewählt:{" "}
+          <span className="font-medium">{selectedSupplier.fullName}</span>
         </div>
       )}
 
@@ -142,9 +141,7 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
         </p>
       )}
 
-      {error && (
-        <p className="mb-4 text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {!isLoading && !error && suppliers.length === 0 && (
         <p className="mb-4 text-sm text-muted-foreground">

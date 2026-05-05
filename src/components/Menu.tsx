@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import { useCart } from "../contexts/useCart";
 import { useSupplier } from "../contexts/useSupplier";
 import { toast } from "sonner";
+import { apiGet } from "../lib/api";
 
 const API_BASE_URL = "http://localhost:8080";
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Store, Users, Utensils } from "lucide-react";
 import { Sidebar, type AdminSection } from "../Sidebar";
 
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "http://localhost:8000";
 
 type ApiUser = {
   id: string;
@@ -149,7 +149,7 @@ export function AdminDashboard() {
           <h2 className="text-lg font-semibold">Fehler beim Laden</h2>
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Prüfe, ob das Backend auf Port 8080 läuft und CORS korrekt erlaubt ist.
+            Prüfe, ob das Backend auf Port 8000 läuft und CORS korrekt erlaubt ist.
           </p>
         </div>
       );

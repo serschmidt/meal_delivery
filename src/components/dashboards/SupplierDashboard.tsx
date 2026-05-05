@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Sidebar, type AdminSection } from "../Sidebar";
 
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "http://localhost:8000";
 
 type ApiUser = {
   id: string;

@@ -25,6 +25,10 @@ type Supplier = {
   };
 };
 
+type SuppliersResponse = {
+  data: Supplier[];
+};
+
 export function DeliveryPartners() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,13 +37,14 @@ export function DeliveryPartners() {
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/suppliers/all");
+        const response = await fetch("http://localhost:8000/?route=suppliers/all");
+
         if (!response.ok) {
           throw new Error("Fehler beim Laden der Lieferanten");
         }
 
-        const data: Supplier[] = await response.json();
-        setSuppliers(data);
+        const json: SuppliersResponse = await response.json();
+        setSuppliers(Array.isArray(json.data) ? json.data : []);
       } catch (err) {
         setError("Lieferanten konnten nicht geladen werden.");
       } finally {
@@ -51,16 +56,16 @@ export function DeliveryPartners() {
   }, []);
 
   if (loading) {
-    return <p className="text-center py-8">Lade Lieferanten...</p>;
+    return <p className="py-8 text-center">Lade Lieferanten...</p>;
   }
 
   if (error) {
-    return <p className="text-center py-8 text-red-500">{error}</p>;
+    return <p className="py-8 text-center text-red-500">{error}</p>;
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8">
-      <h2 className="mb-6 text-2xl font-bold text-center">
+    <div className="mx-auto w-full max-w-4xl px-4 py-8">
+      <h2 className="mb-6 text-center text-2xl font-bold">
         Lieferanten in deiner Nähe:
       </h2>
 
@@ -77,7 +82,7 @@ export function DeliveryPartners() {
             <CarouselItem key={supplier.id} className="pl-1 md:basis-1/3">
               <Card className="h-[120px]">
                 <CardHeader>
-                  <CardTitle className="text-lg line-clamp-1">
+                  <CardTitle className="line-clamp-1 text-lg">
                     {supplier.fullName}
                   </CardTitle>
                 </CardHeader>
@@ -85,7 +90,7 @@ export function DeliveryPartners() {
                   <p className="text-sm text-muted-foreground">
                     {supplier.address.postalCode} {supplier.address.city}
                   </p>
-                  <p className="text-sm text-muted-foreground line-clamp-1">
+                  <p className="line-clamp-1 text-sm text-muted-foreground">
                     {supplier.address.street} {supplier.address.houseNumber}
                   </p>
                 </CardContent>
