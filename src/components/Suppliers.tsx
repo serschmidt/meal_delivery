@@ -12,28 +12,29 @@ import { Input } from "./ui/input";
 import { useSupplier } from "../contexts/useSupplier";
 import { apiGet } from "../lib/api";
 
-const API_BASE_URL = "http://localhost:8000";
-
 type SupplierAddress = {
-  id: string;
   street: string;
   houseNumber: string;
   postalCode: string;
   city: string;
 };
 
+type SupplierPayment = {
+  accountHolder: string | null;
+  iban: string | null;
+  paypalLink: string | null;
+};
+
 type Supplier = {
   id: string;
   fullName: string;
   email: string;
-  enabled: boolean;
-  guest: boolean;
-  role: "SUPPLIER";
-  address?: SupplierAddress;
-};
-
-type SuppliersResponse = {
-  data: Supplier[];
+  phone: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  address: SupplierAddress;
+  payment: SupplierPayment;
 };
 
 type SuppliersProps = {
@@ -47,10 +48,6 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadAllSuppliers = async (signal?: AbortSignal) => {
-    return apiGet<Supplier[]>("suppliers/all", undefined, signal);
-  };
-
   useEffect(() => {
     const controller = new AbortController();
 
@@ -59,36 +56,22 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
         setIsLoading(true);
         setError("");
 
-        if (!searchValue.trim()) {
-          const data = await apiGet<Supplier[]>(
-            "suppliers/search",
-            { q: searchValue },
-            controller.signal,
-          );
-          setSuppliers(data);
-          return;
-        }
-
-        const response = await fetch(
-          `${API_BASE_URL}/?route=suppliers/search&q=${encodeURIComponent(searchValue)}`,
-          {
-            signal: controller.signal,
-          },
+        const data = await apiGet<Supplier[]>(
+          searchValue.trim() ? "suppliers/search" : "suppliers/all",
+          searchValue.trim() ? { q: searchValue } : undefined,
+          controller.signal,
         );
 
-        if (!response.ok) {
-          throw new Error("Supplier-Suche fehlgeschlagen.");
-        }
-
-        const json: SuppliersResponse = await response.json();
-        setSuppliers(Array.isArray(json.data) ? json.data : []);
+        setSuppliers(Array.isArray(data) ? data : []);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
 
         setError(
-          err instanceof Error ? err.message : "Fehler bei der Supplier-Suche.",
+          err instanceof Error
+            ? err.message
+            : "Fehler bei der Supplier-Suche.",
         );
       } finally {
         setIsLoading(false);
@@ -145,7 +128,7 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
 
       {!isLoading && !error && suppliers.length === 0 && (
         <p className="mb-4 text-sm text-muted-foreground">
-          Keine Supplier gefunden.
+          Keine Lieferanten gefunden.
         </p>
       )}
 
@@ -177,18 +160,14 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
 
                   <CardContent className="space-y-1 pt-2">
                     <p className="text-sm text-muted-foreground">
-                      {supplier.address
-                        ? `${supplier.address.street} ${supplier.address.houseNumber}`
-                        : "Keine Adresse vorhanden"}
+                      {supplier.address.street} {supplier.address.houseNumber}
                     </p>
 
                     <p className="text-sm text-muted-foreground">
-                      {supplier.address
-                        ? `${supplier.address.postalCode} ${supplier.address.city}`
-                        : ""}
+                      {supplier.address.postalCode} {supplier.address.city}
                     </p>
 
-                    <p className="text-xs text-muted-foreground">
+                    <p className="line-clamp-1 text-xs text-muted-foreground">
                       {supplier.email}
                     </p>
                   </CardContent>

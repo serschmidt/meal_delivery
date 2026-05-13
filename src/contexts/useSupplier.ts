@@ -1,10 +1,10 @@
 import { useContext } from "react";
-import { SupplierContext } from "./supplier-context";
+import { SupplierContext } from "./SupplierContext";
 
 export function useSupplier() {
   const context = useContext(SupplierContext);
 
-  if (!context) {
+  if (context === undefined) {
     throw new Error("useSupplier must be used within a SupplierProvider");
   }
 

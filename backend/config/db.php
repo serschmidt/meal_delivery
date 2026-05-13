@@ -2,19 +2,29 @@
 
 function db(): PDO
 {
-    $host = getenv('DB_HOST') ?: 'localhost';
-    $port = getenv('DB_PORT') ?: '3306';
-    $name = getenv('DB_NAME') ?: 'meal_delivery_db';
-    $user = getenv('DB_USER') ?: 'root';
-    $pass = getenv('DB_PASS') ?: 'Di01Ci03Be09To21.'; // 'U2NobWlkdA=='; // Base64 for 'Schmidt' 
+    static $pdo = null;
 
-    $dsn = "mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4";
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
 
-    $pdo = new PDO($dsn, $user, $pass, [
+
+    $host = 'localhost';
+    $port = '3306';
+    $db = 'meal_delivery_db';
+    $user = 'root';
+    $pass = 'Di01Ci03Be09To21.';
+    $charset = 'utf8mb4';
+
+    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
+
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
+    ];
+
+    $pdo = new PDO($dsn, $user, $pass, $options);
 
     return $pdo;
 }

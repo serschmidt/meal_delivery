@@ -1,4 +1,5 @@
 <?php
+// src/orders.php
 
 require_once __DIR__ . '/../config/db.php';
 
@@ -16,14 +17,26 @@ function mapOrderRow(array $row): array
         'weekly_menu_id'      => binToUuid($row['weekly_menu_id']),
     ];
 }
-
 function getOrderItems(string $orderId): array
 {
     $sql = <<<SQL
-SELECT id, line_total, price, quantity, unit_price, order_id, weekly_menu_entry_id
-FROM order_items
-WHERE order_id = :order_id
-ORDER BY id
+SELECT 
+    oi.id,
+    oi.line_total,
+    oi.price,
+    oi.quantity,
+    oi.unit_price,
+    oi.order_id,
+    oi.weekly_menu_entry_id,
+    m.name AS meal_name,
+    m.description AS meal_description,
+    wme.menu_date,
+    wme.day_of_week
+FROM order_items oi
+INNER JOIN weekly_menu_entries wme ON wme.id = oi.weekly_menu_entry_id
+INNER JOIN meals m ON m.id = wme.meal_id
+WHERE oi.order_id = :order_id
+ORDER BY wme.menu_date ASC, wme.position ASC
 SQL;
 
     $stmt = db()->prepare($sql);
@@ -32,13 +45,17 @@ SQL;
 
     return array_map(function (array $row): array {
         return [
-            'id'                  => binToUuid($row['id']),
-            'line_total'          => (float) $row['line_total'],
-            'price'               => (float) $row['price'],
-            'quantity'            => (int)   $row['quantity'],
-            'unit_price'          => (float) $row['unit_price'],
-            'order_id'            => binToUuid($row['order_id']),
-            'weekly_menu_entry_id'=> binToUuid($row['weekly_menu_entry_id']),
+            'id'                   => binToUuid($row['id']),
+            'line_total'           => (float) $row['line_total'],
+            'price'                => (float) $row['price'],
+            'quantity'             => (int)   $row['quantity'],
+            'unit_price'           => (float) $row['unit_price'],
+            'order_id'             => binToUuid($row['order_id']),
+            'weekly_menu_entry_id' => binToUuid($row['weekly_menu_entry_id']),
+            'meal_name'            => $row['meal_name'],
+            'meal_description'     => $row['meal_description'],
+            'menu_date'            => $row['menu_date'],
+            'day_of_week'          => $row['day_of_week'],
         ];
     }, $rows);
 }

@@ -8,26 +8,61 @@ import {
 } from "./ui/carousel";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
+type SupplierApi = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  street: string;
+  house_number: string;
+  postal_code: string;
+  city: string;
+  is_active: number | boolean;
+  created_at: string;
+  updated_at: string;
+  account_holder: string | null;
+  iban: string | null;
+  paypal_link: string | null;
+};
+
 type Supplier = {
   id: string;
   fullName: string;
   email: string;
-  enabled: boolean;
-  guest: boolean;
-  role: string;
-  passwordHash: string | null;
-  address: {
-    id: string;
-    street: string;
-    houseNumber: string;
-    postalCode: string;
-    city: string;
-  };
+  phone: string | null;
+  street: string;
+  houseNumber: string;
+  postalCode: string;
+  city: string;
+  isActive: boolean;
+  accountHolder: string | null;
+  iban: string | null;
+  paypalLink: string | null;
 };
 
 type SuppliersResponse = {
-  data: Supplier[];
+  data: SupplierApi[];
 };
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "https://liefermonopol.de/backend/public";
+
+function mapSupplier(apiSupplier: SupplierApi): Supplier {
+  return {
+    id: apiSupplier.id,
+    fullName: apiSupplier.full_name,
+    email: apiSupplier.email,
+    phone: apiSupplier.phone,
+    street: apiSupplier.street,
+    houseNumber: apiSupplier.house_number,
+    postalCode: apiSupplier.postal_code,
+    city: apiSupplier.city,
+    isActive: Boolean(apiSupplier.is_active),
+    accountHolder: apiSupplier.account_holder,
+    iban: apiSupplier.iban,
+    paypalLink: apiSupplier.paypal_link,
+  };
+}
 
 export function DeliveryPartners() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -37,14 +72,22 @@ export function DeliveryPartners() {
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-        const response = await fetch("http://localhost:8000/?route=suppliers/all");
+        const response = await fetch(`${API_URL}/?route=suppliers/all`, {
+          headers: {
+            Accept: "application/json",
+          },
+        });
 
         if (!response.ok) {
-          throw new Error("Fehler beim Laden der Lieferanten");
+          throw new Error(`Fehler beim Laden der Lieferanten (${response.status})`);
         }
 
         const json: SuppliersResponse = await response.json();
-        setSuppliers(Array.isArray(json.data) ? json.data : []);
+        const mappedSuppliers = Array.isArray(json.data)
+          ? json.data.map(mapSupplier)
+          : [];
+
+        setSuppliers(mappedSuppliers);
       } catch (err) {
         setError("Lieferanten konnten nicht geladen werden.");
       } finally {
@@ -61,6 +104,10 @@ export function DeliveryPartners() {
 
   if (error) {
     return <p className="py-8 text-center text-red-500">{error}</p>;
+  }
+
+  if (suppliers.length === 0) {
+    return <p className="py-8 text-center">Aktuell sind noch keine Lieferanten verfügbar.</p>;
   }
 
   return (
@@ -88,10 +135,10 @@ export function DeliveryPartners() {
                 </CardHeader>
                 <CardContent className="pt-2">
                   <p className="text-sm text-muted-foreground">
-                    {supplier.address.postalCode} {supplier.address.city}
+                    {supplier.postalCode} {supplier.city}
                   </p>
                   <p className="line-clamp-1 text-sm text-muted-foreground">
-                    {supplier.address.street} {supplier.address.houseNumber}
+                    {supplier.street} {supplier.houseNumber}
                   </p>
                 </CardContent>
               </Card>

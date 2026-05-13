@@ -1,30 +1,49 @@
 <?php
-
+// /src/weekly-menus.php
 require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/meals.php';
+require_once __DIR__ . '/helpers.php';
 
 function mapWeeklyMenuRow(array $row): array
 {
     return [
         'id' => binToUuid($row['id']),
-        'calendar_week' => (int) $row['calendar_week'],
+        'calendarWeek' => isset($row['calendar_week']) ? (int) $row['calendar_week'] : null,
         'title' => $row['title'],
         'description' => $row['description'],
-        'start_date' => $row['start_date'],
-        'end_date' => $row['end_date'],
-        'image_url' => $row['image_url'],
+        'startDate' => $row['start_date'],
+        'endDate' => $row['end_date'],
+        'imageUrl' => $row['image_url'],
     ];
 }
 
 function mapWeeklyMenuEntryRow(array $row): array
 {
+    $dayLabels = [
+        'MONDAY'    => 'Montag',
+        'TUESDAY'   => 'Dienstag',
+        'WEDNESDAY' => 'Mittwoch',
+        'THURSDAY'  => 'Donnerstag',
+        'FRIDAY'    => 'Freitag',
+        'SATURDAY'  => 'Samstag',
+        'SUNDAY'    => 'Sonntag',
+    ];
+
+    $dayOfWeek = $row['day_of_week'] ?? '';
+
     return [
-        'id' => binToUuid($row['id']),
-        'day_of_week' => $row['day_of_week'],
-        'menu_date' => $row['menu_date'],
-        'position' => (int) $row['position'],
-        'meal_id' => binToUuid($row['meal_id']),
-        'weekly_menu_id' => binToUuid($row['weekly_menu_id']),
+        'id'        => binToUuid($row['id']),
+        'dayOfWeek' => $dayOfWeek,
+        'dayLabel'  => $dayLabels[$dayOfWeek] ?? $dayOfWeek,
+        'menuDate'  => $row['menu_date'],
+        'position'  => isset($row['position']) ? (int) $row['position'] : null,
+        'meal'      => [
+            'id'          => binToUuid($row['meal_id']),
+            'name'        => $row['meal_name'],
+            'description' => $row['meal_description'],
+            'price' => isset($row['meal_price']) ? round((float) $row['meal_price'], 2) : 0,
+            'available'   => isset($row['meal_available']) ? (bool) $row['meal_available'] : true,
+            'imageUrl'    => $row['meal_image_url'],
+        ],
     ];
 }
 
@@ -97,10 +116,22 @@ function validateWeeklyMenuData(array $data): void
 function getWeeklyMenuEntries(string $weeklyMenuId): array
 {
     $sql = "
-        SELECT id, day_of_week, menu_date, position, meal_id, weekly_menu_id
-        FROM weekly_menu_entries
-        WHERE weekly_menu_id = :weekly_menu_id
-        ORDER BY menu_date ASC, position ASC
+        SELECT 
+            wme.id,
+            wme.day_of_week,
+            wme.menu_date,
+            wme.position,
+            wme.meal_id,
+            wme.weekly_menu_id,
+            m.name AS meal_name,
+            m.description AS meal_description,
+            m.price AS meal_price,
+            m.available AS meal_available,
+            m.image_url AS meal_image_url
+        FROM weekly_menu_entries wme
+        INNER JOIN meals m ON m.id = wme.meal_id
+        WHERE wme.weekly_menu_id = :weekly_menu_id
+        ORDER BY wme.menu_date ASC, wme.position ASC
     ";
 
     $stmt = db()->prepare($sql);
@@ -113,12 +144,20 @@ function getWeeklyMenuEntries(string $weeklyMenuId): array
     return array_map('mapWeeklyMenuEntryRow', $rows);
 }
 
+
 function getAllWeeklyMenus(): array
 {
     $sql = "
-        SELECT id, calendar_week, title, description, start_date, end_date, image_url
-        FROM weekly_menus
-        ORDER BY start_date DESC, calendar_week DESC
+        SELECT
+            wm.id,
+            wm.calendar_week,
+            wm.title,
+            wm.description,
+            wm.start_date,
+            wm.end_date,
+            wm.image_url
+        FROM weekly_menus wm
+        ORDER BY wm.start_date ASC, wm.calendar_week ASC
     ";
 
     $stmt = db()->query($sql);
@@ -138,9 +177,16 @@ function getAllWeeklyMenus(): array
 function getWeeklyMenuById(string $id): ?array
 {
     $sql = "
-        SELECT id, calendar_week, title, description, start_date, end_date, image_url
-        FROM weekly_menus
-        WHERE id = :id
+        SELECT
+            wm.id,
+            wm.calendar_week,
+            wm.title,
+            wm.description,
+            wm.start_date,
+            wm.end_date,
+            wm.image_url
+        FROM weekly_menus wm
+        WHERE wm.id = :id
         LIMIT 1
     ";
 
@@ -317,10 +363,17 @@ function updateWeeklyMenu(string $id, array $data): ?array
 function getUpcomingWeeklyMenus(): array
 {
     $sql = "
-        SELECT id, calendar_week, title, description, start_date, end_date, image_url
-        FROM weekly_menus
-        WHERE end_date >= CURDATE()
-        ORDER BY start_date ASC, calendar_week ASC
+        SELECT
+            wm.id,
+            wm.calendar_week,
+            wm.title,
+            wm.description,
+            wm.start_date,
+            wm.end_date,
+            wm.image_url
+        FROM weekly_menus wm
+        WHERE wm.end_date >= CURDATE()
+        ORDER BY wm.start_date ASC, wm.calendar_week ASC
     ";
 
     $stmt = db()->query($sql);

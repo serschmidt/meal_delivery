@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { useCart } from "../contexts/useCart";
 import { useSupplier } from "../contexts/useSupplier";
 import { toast } from "sonner";
 import { apiGet } from "../lib/api";
-
-const API_BASE_URL = "http://localhost:8080";
 
 type ApiMeal = {
   id?: string;
@@ -34,8 +32,6 @@ type ApiWeeklyMenu = {
   title?: string | null;
   description?: string | null;
   imageUrl?: string | null;
-  supplierId?: string;
-  supplierName?: string;
   entries?: ApiWeeklyMenuEntry[] | null;
 };
 
@@ -65,17 +61,7 @@ type WeeklyMenu = {
   title: string;
   description: string;
   imageUrl?: string;
-  supplierId?: string;
-  supplierName?: string;
   entries: WeeklyMenuEntry[];
-};
-
-type CartItem = {
-  mealId: string;
-  name: string;
-  description: string;
-  price: number;
-  imageUrl?: string;
 };
 
 const dayOrder: Record<string, number> = {
@@ -94,8 +80,16 @@ function formatPrice(value: number) {
 
 function formatDateRange(startDate: string | null, endDate: string | null) {
   if (!startDate && !endDate) return "";
-  if (startDate && endDate) return `${startDate} bis ${endDate}`;
-  return startDate ?? endDate ?? "";
+
+  const format = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+  if (startDate && endDate) return `${format(startDate)} bis ${format(endDate)}`;
+  return startDate ? format(startDate) : format(endDate!);
 }
 
 function normalizeMeal(meal: ApiMeal | null | undefined): WeeklyMeal {
@@ -150,8 +144,6 @@ function normalizeWeeklyMenu(menu: ApiWeeklyMenu, index: number): WeeklyMenu {
       menu.description?.trim() ||
       "Frisch zusammengestellte Gerichte für diese Woche.",
     imageUrl: menu.imageUrl ?? normalizedEntries[0]?.meal.imageUrl ?? undefined,
-    supplierId: menu.supplierId ?? undefined,
-    supplierName: menu.supplierName ?? undefined,
     entries: normalizedEntries,
   };
 }
@@ -172,18 +164,11 @@ export function Menu() {
         setIsLoading(true);
         setError("");
 
-        const response = await fetch(`${API_BASE_URL}/api/weekly-menus`, {
-          signal: controller.signal,
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error("Wochenübersichten konnten nicht geladen werden.");
-        }
-
-        const data: ApiWeeklyMenu[] = await response.json();
+        const data = await apiGet<ApiWeeklyMenu[]>(
+          "weekly-menus",
+          undefined,
+          controller.signal,
+        );
 
         const normalized = Array.isArray(data)
           ? data.map((menu, index) => normalizeWeeklyMenu(menu, index))
@@ -191,12 +176,14 @@ export function Menu() {
 
         setWeeklyMenus(normalized);
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
 
         setError(
           err instanceof Error
             ? err.message
-            : "Fehler beim Laden der Wochenübersichten.",
+            : "Fehler beim Laden der Wochenmenüs.",
         );
       } finally {
         setIsLoading(false);
@@ -205,21 +192,16 @@ export function Menu() {
 
     loadWeeklyMenus();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+    };
   }, []);
-
-  const filteredMenus = useMemo(() => {
-    if (!selectedSupplier?.id) return weeklyMenus;
-    return weeklyMenus.filter(
-      (menu) => menu.supplierId === selectedSupplier.id,
-    );
-  }, [weeklyMenus, selectedSupplier]);
 
   return (
     <div className="m-4 space-y-6">
       {selectedSupplier && (
         <p className="text-sm text-muted-foreground">
-          Aktiver Supplier:{" "}
+          Aktiver Lieferant:{" "}
           <span className="font-medium text-foreground">
             {selectedSupplier.fullName}
           </span>
@@ -234,15 +216,15 @@ export function Menu() {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {!isLoading && !error && filteredMenus.length === 0 && (
+      {!isLoading && !error && weeklyMenus.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Für den ausgewählten Supplier wurden keine Wochenmenüs gefunden.
+          Keine Wochenmenüs gefunden.
         </p>
       )}
 
       {!isLoading &&
         !error &&
-        filteredMenus.map((menu) => {
+        weeklyMenus.map((menu) => {
           const firstRow = menu.entries.slice(0, 4);
           const secondRow = menu.entries.slice(4, 7);
           const dateRange = formatDateRange(menu.startDate, menu.endDate);
@@ -259,7 +241,6 @@ export function Menu() {
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   {menu.calendarWeek && <span>KW {menu.calendarWeek}</span>}
                   {dateRange && <span>{dateRange}</span>}
-                  {menu.supplierName && <span>von {menu.supplierName}</span>}
                 </div>
               </CardHeader>
 
@@ -317,11 +298,16 @@ export function Menu() {
                               onClick={() => {
                                 addToCart({
                                   mealId: entry.meal.id,
+                                  weeklyMenuEntryId: entry.id,
+                                  weeklyMenuId: menu.id,
+                                  weeklyMenuLabel:
+                                    menu.calendarWeek?.toString(),
+                                  deliveryDate: entry.menuDate, // ← NEU – war vergessen
                                   name: entry.meal.name,
                                   description: entry.meal.description,
                                   price: entry.meal.price,
                                   imageUrl: entry.meal.imageUrl,
-                                } as CartItem);
+                                });
 
                                 toast.success("Zum Warenkorb hinzugefügt", {
                                   description: `${entry.meal.name} wurde hinzugefügt.`,
@@ -365,15 +351,24 @@ export function Menu() {
                               type="button"
                               size="sm"
                               className="mt-auto pt-3"
-                              onClick={() =>
+                              onClick={() => {
                                 addToCart({
                                   mealId: entry.meal.id,
+                                  weeklyMenuEntryId: entry.id,
+                                  weeklyMenuId: menu.id,
+                                  weeklyMenuLabel:
+                                    menu.calendarWeek?.toString(),
+                                  deliveryDate: entry.menuDate, // NEU – kommt aus WeeklyMenuEntry
                                   name: entry.meal.name,
                                   description: entry.meal.description,
                                   price: entry.meal.price,
                                   imageUrl: entry.meal.imageUrl,
-                                } as CartItem)
-                              }
+                                });
+
+                                toast.success("Zum Warenkorb hinzugefügt", {
+                                  description: `${entry.meal.name} wurde hinzugefügt.`,
+                                });
+                              }}
                               disabled={!entry.meal.available}
                             >
                               {entry.meal.available

@@ -1,15 +1,14 @@
 import { useState, type ReactNode } from "react";
-import {
-  SupplierContext,
-  type Supplier,
-} from "./supplier-context";
+import { SupplierContext, type Supplier } from "./SupplierContext";
 
 type SupplierProviderProps = {
   children: ReactNode;
 };
 
 export function SupplierProvider({ children }: SupplierProviderProps) {
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
+    null,
+  );
 
   const selectSupplier = (supplier: Supplier) => {
     setSelectedSupplier(supplier);

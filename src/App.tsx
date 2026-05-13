@@ -13,8 +13,10 @@ import { CartProvider } from "./contexts/CartProvider";
 import { useCart } from "./contexts/useCart";
 
 import { HomePage } from "./pages/HomePage";
-import { DistributorRegistrationPage } from "./pages/DistributorRegistrationPage";
+import { SupplierRegistrationPage } from "./pages/SupplierRegistrationPage";
+import { AdminPage } from "./pages/AdminPage";
 import { Sidebar } from "./components/Sidebar";
+import { CheckoutPage } from "./pages/CheckoutPage";
 import { Toaster } from "sonner";
 
 import { AgbPage } from "./pages/AgbPage";
@@ -59,7 +61,7 @@ function AppContent() {
         <div className="space-y-4 text-sm leading-6">
           <p className="font-semibold">Essen auf Rädern</p>
           <p>
-            Mit „Essen auf Rädern“ bleiben Sie kulinarisch unabhängig – egal ob
+            Mit „Essen auf Rädern" bleiben Sie kulinarisch unabhängig – egal ob
             dauerhaft im Alter, vorübergehend nach einem Unfall oder als
             Entlastung, wenn Angehörige im Urlaub sind.
           </p>
@@ -78,7 +80,7 @@ function AppContent() {
           <p>Entdecken Sie Ihre neue Leibspeise und bestellen Sie noch heute.</p>
           <p>Jeden Tag warm zu Ihnen geliefert.</p>
           <p className="font-medium">Deliverymonopol · Marie kocht</p>
-          <p className="italic">„Marie steht am Herd und zaubert etwas Leckeres.“</p>
+          <p className="italic">„Marie steht am Herd und zaubert etwas Leckeres."</p>
         </div>
       ),
     },
@@ -117,7 +119,6 @@ function AppContent() {
             <p className="font-semibold">Was kostet der tägliche Mittagstisch?</p>
             <p>Warm geliefert 5,60 €.</p>
           </div>
-
           <div className="space-y-2">
             <p className="font-semibold">
               Was bietet der tägliche Mittagstisch für 5,60 €?
@@ -125,54 +126,18 @@ function AppContent() {
             <p>
               Unser täglicher Mittagstisch bietet eine vollwertige, warm
               angelieferte Mahlzeit für einen Festpreis von 5,60 € inklusive
-              Lieferung. Wir legen Wert auf Abwechslung und eine seniorengerechte
-              sowie nährstoffreiche Zusammenstellung der Speisen.
+              Lieferung.
             </p>
           </div>
-
           <div className="space-y-2">
             <p className="font-semibold">
               Zu welcher Uhrzeit wird das Essen geliefert?
             </p>
             <p>
               Die Lieferung erfolgt täglich in der Mittagszeit zwischen 11:00 und
-              13:30 Uhr. Wir liefern das Essen in speziellen Thermoboxen aus, damit
-              es heiß bei Ihnen ankommt.
+              13:30 Uhr.
             </p>
           </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold">
-              Wer hat Anspruch auf einen Zuschuss für das Mittagessen beim Sozialamt?
-            </p>
-            <p>
-              Anspruchsberechtigt sind in der Regel Personen, die Leistungen der
-              Grundsicherung im Alter oder bei Erwerbsminderung beziehen oder über
-              ein sehr geringes Einkommen verfügen. Auch bei Vorliegen eines
-              Pflegegrades kann eine Kostenübernahme geprüft werden.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold">
-              Wie hilft Ihr Service bei der Beantragung der Kostenübernahme?
-            </p>
-            <p>
-              Wir unterstützen Sie beim Ausfüllen der notwendigen Formulare für das
-              Sozialamt und legen eine entsprechende Kostenzusicherung bei.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold">
-              Muss ich für den Zuschuss zum Sozialamt gehen oder erledigen Sie das?
-            </p>
-            <p>
-              Wir bereiten alle Unterlagen für Sie vor. Den Antrag müssen Sie selbst
-              einreichen, aber wir begleiten Sie beratend durch den gesamten Prozess.
-            </p>
-          </div>
-
           <div className="space-y-2">
             <p className="font-semibold">Wie wird der Mittagstisch bezahlt?</p>
             <p>Per Überweisung oder PayPal direkt an den Lieferanten.</p>
@@ -183,26 +148,11 @@ function AppContent() {
   } as const;
 
   const footerDialogConfig = {
-    agb: {
-      title: "AGB",
-      content: <AgbPage />,
-    },
-    datenschutz: {
-      title: "Datenschutz",
-      content: <DatenschutzPage />,
-    },
-    impressum: {
-      title: "Impressum",
-      content: <ImpressumPage />,
-    },
-    "versand-zahlung": {
-      title: "Versand & Zahlung",
-      content: <VersandZahlungPage />,
-    },
-    widerrufsrecht: {
-      title: "Widerrufsrecht",
-      content: <WiderrufsrechtPage />,
-    },
+    agb: { title: "AGB", content: <AgbPage /> },
+    datenschutz: { title: "Datenschutz", content: <DatenschutzPage /> },
+    impressum: { title: "Impressum", content: <ImpressumPage /> },
+    "versand-zahlung": { title: "Versand & Zahlung", content: <VersandZahlungPage /> },
+    widerrufsrecht: { title: "Widerrufsrecht", content: <WiderrufsrechtPage /> },
   } as const;
 
   return (
@@ -223,8 +173,8 @@ function AppContent() {
         <div className="flex flex-1">
           <Sidebar />
 
-          <main className="ml-36 flex-1 px-4 py-6 md:px-8">
-            <div className="mx-auto max-w-7xl">
+          <main className="ml-48 flex-1 px-4 py-6 md:px-1">
+            <div className="mx-auto">
               <Routes>
                 <Route
                   path="/"
@@ -237,8 +187,14 @@ function AppContent() {
                 />
                 <Route
                   path="/lieferant-werden"
-                  element={<DistributorRegistrationPage />}
+                  element={<SupplierRegistrationPage />}
                 />
+                <Route
+                  path="/admin"
+                  element={<AdminPage />}
+                />
+                <Route path="/checkout" element={<CheckoutPage />} />
+
               </Routes>
             </div>
           </main>
@@ -247,25 +203,12 @@ function AppContent() {
         <footer className="border-t bg-background/95 p-4 text-center text-sm text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span>© 2026 Marie Kocht.</span>
-
-            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("agb")}>
-              AGB
-            </Button>
-            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("datenschutz")}>
-              Datenschutz
-            </Button>
-            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("impressum")}>
-              Impressum
-            </Button>
-            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("versand-zahlung")}>
-              Versand & Zahlung
-            </Button>
-            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("widerrufsrecht")}>
-              Widerrufsrecht
-            </Button>
-            <Button variant="outline" className="h-auto p-0 text-sm" disabled>
-              Fragen und Antworten
-            </Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("agb")}>AGB</Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("datenschutz")}>Datenschutz</Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("impressum")}>Impressum</Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("versand-zahlung")}>Versand & Zahlung</Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" onClick={() => setFooterDialog("widerrufsrecht")}>Widerrufsrecht</Button>
+            <Button variant="outline" className="h-auto p-0 text-sm" disabled>Fragen und Antworten</Button>
           </div>
         </footer>
       </div>

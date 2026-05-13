@@ -16,10 +16,10 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
   const supplierName = selectedSupplier?.fullName ?? "Marie Kocht";
 
   return (
-    <div className="w-full space-y-10 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="w-full space-y-10 py-6">
       <section className="w-full rounded-3xl bg-muted/40 px-6 py-12">
-        <div className="mx-auto flex w-full max-w-7xl justify-center">
-          <div className="flex w-full max-w-3xl flex-col items-center space-y-5 text-center">
+        <div className="flex w-full justify-center">
+          <div className="flex w-full flex-col items-center space-y-5 text-center">
             <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Mittagessen warm geliefert, Essen auf Rädern
             </p>
@@ -116,10 +116,7 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
       </section>
 
       <section id="lieferanten" className="w-full">
-        <Suppliers 
-          searchValue={searchValue} 
-          onSearchChange={onSearchChange}  
-        />
+        <Suppliers searchValue={searchValue} onSearchChange={onSearchChange} />
       </section>
 
       <section id="wochenmenue" className="w-full space-y-4">

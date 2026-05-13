@@ -1,4 +1,5 @@
 <?php
+//src/cors.php
 
 function handleCors(): void
 {

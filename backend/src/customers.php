@@ -107,12 +107,25 @@ SQL;
         'email' => $existing['email'],
     ];
 }
-
 function createOrder(array $data): array
 {
-    // 1. Customer Upsert
     if (!isset($data['customer']) || !is_array($data['customer'])) {
         throw new InvalidArgumentException('customer object is required');
+    }
+    if (empty($data['supplier_id'])) {
+        throw new InvalidArgumentException('supplier_id is required');
+    }
+    if (empty($data['weekly_menu_id'])) {
+        throw new InvalidArgumentException('weekly_menu_id is required');
+    }
+    if (empty($data['items']) || !is_array($data['items'])) {
+        throw new InvalidArgumentException('items are required');
+    }
+    if (empty($data['delivery_address'])) {
+        throw new InvalidArgumentException('delivery_address is required');
+    }
+    if (empty($data['billing_address'])) {
+        throw new InvalidArgumentException('billing_address is required');
     }
 
     $pdo = db();
@@ -120,9 +133,11 @@ function createOrder(array $data): array
     try {
         $pdo->beginTransaction();
 
+        // 1. Kunde anlegen / updaten
         $customerInfo = upsertCustomerFromOrder($data['customer']);
+        $customerId   = $customerInfo['id'];
 
-        // 2. Adressen anlegen (vereinfachtes Beispiel – du kannst hier auch upsert machen)
+        // 2. Adressen anlegen
         $billingAddressId  = generateUuid();
         $deliveryAddressId = generateUuid();
 
@@ -149,98 +164,92 @@ SQL;
             ':street'       => $data['delivery_address']['street']       ?? '',
         ]);
 
-        // 3. Order Kopf
-        $orderId = generateUuid();
-        $now     = date('Y-m-d H:i:s');
-
-        $insertOrderSql = <<<SQL
-INSERT INTO orders (
-    id,
-    created_at,
-    status,
-    total_price,
-    billing_address_id,
-    customer_id,
-    delivery_address_id,
-    supplier_id,
-    weekly_menu_id
-) VALUES (
-    :id,
-    :created_at,
-    :status,
-    :total_price,
-    :billing_address_id,
-    :customer_id,
-    :delivery_address_id,
-    :supplier_id,
-    :weekly_menu_id
-)
-SQL;
-
-        $orderStmt = $pdo->prepare($insertOrderSql);
-        $orderStmt->execute([
-            ':id'                 => uuidToBin($orderId),
-            ':created_at'         => $now,
-            ':status'             => $data['status']       ?? 'PENDING',
-            ':total_price'        => $data['total_price'],
-            ':billing_address_id' => uuidToBin($billingAddressId),
-            // hier mappst du von customers.id (char36) auf users.id (binary16),
-            // falls du eine Verknüpfung hast; wenn customer_id in orders auf users geht,
-            // musst du da evtl. noch nachziehen – das hängt von deinem User-Modell ab.
-            ':customer_id'        => uuidToBin($data['customer_id']),
-            ':delivery_address_id'=> uuidToBin($deliveryAddressId),
-            ':supplier_id'        => uuidToBin($data['supplier_id']),
-            ':weekly_menu_id'     => uuidToBin($data['weekly_menu_id']),
-        ]);
-
-        // 4. Order Items
-        if (!isset($data['items']) || !is_array($data['items'])) {
-            throw new InvalidArgumentException('items is required and must be an array');
+        // 3. Gesamtpreis berechnen
+        $totalPrice = 0.0;
+        foreach ($data['items'] as $item) {
+            $totalPrice += (int) $item['quantity'] * (float) $item['unit_price'];
         }
 
-        $insertItemSql = <<<SQL
-INSERT INTO order_items (
-    id,
-    line_total,
-    price,
-    quantity,
-    unit_price,
-    order_id,
-    weekly_menu_entry_id
-) VALUES (
-    :id,
-    :line_total,
-    :price,
-    :quantity,
-    :unit_price,
-    :order_id,
-    :weekly_menu_entry_id
-)
-SQL;
+        // 4. Bestellung anlegen
+        $orderId = generateUuid();
 
-        $itemStmt = $pdo->prepare($insertItemSql);
+        $pdo->prepare(<<<SQL
+INSERT INTO orders (
+    id, created_at, status, total_price,
+    billing_address_id, customer_id,
+    delivery_address_id, supplier_id, weekly_menu_id
+) VALUES (
+    :id, NOW(6), 'PENDING', :total_price,
+    :billing_address_id, :customer_id,
+    :delivery_address_id, :supplier_id, :weekly_menu_id
+)
+SQL)->execute([
+            ':id'                  => uuidToBin($orderId),
+            ':total_price'         => round($totalPrice, 2),
+            ':billing_address_id'  => uuidToBin($billingAddressId),
+            ':customer_id'         => $customerId,
+            ':delivery_address_id' => uuidToBin($deliveryAddressId),
+            ':supplier_id'         => $data['supplier_id'],
+            ':weekly_menu_id'      => uuidToBin($data['weekly_menu_id']),
+        ]);
+
+        // 5. Bestellpositionen
+        $itemStmt = $pdo->prepare(<<<SQL
+INSERT INTO order_items (
+    id, line_total, price, quantity, unit_price,
+    order_id, weekly_menu_entry_id
+) VALUES (
+    :id, :line_total, :price, :quantity, :unit_price,
+    :order_id, :weekly_menu_entry_id
+)
+SQL);
 
         foreach ($data['items'] as $item) {
-            $itemId = generateUuid();
-
-            $quantity   = (int)   $item['quantity'];
-            $unitPrice  = (float) $item['unit_price'];
-            $lineTotal  = $quantity * $unitPrice;
+            $qty       = (int)   $item['quantity'];
+            $unitPrice = (float) $item['unit_price'];
+            $lineTotal = round($qty * $unitPrice, 2);
 
             $itemStmt->execute([
-                ':id'                  => uuidToBin($itemId),
-                ':line_total'          => $lineTotal,
-                ':price'               => $lineTotal,
-                ':quantity'            => $quantity,
-                ':unit_price'          => $unitPrice,
-                ':order_id'            => uuidToBin($orderId),
-                ':weekly_menu_entry_id'=> uuidToBin($item['weekly_menu_entry_id']),
+                ':id'                   => uuidToBin(generateUuid()),
+                ':line_total'           => $lineTotal,
+                ':price'                => $unitPrice,
+                ':quantity'             => $qty,
+                ':unit_price'           => $unitPrice,
+                ':order_id'             => uuidToBin($orderId),
+                ':weekly_menu_entry_id' => uuidToBin($item['weekly_menu_entry_id']),
             ]);
         }
 
         $pdo->commit();
 
-        return getOrderById($orderId);
+        // 6. Bestellung abrufen
+        $completedOrder = getOrderById($orderId);
+
+        // 7. E-Mails versenden – nach commit, außerhalb der Transaktion
+        try {
+            $supplierData = getSupplierById($data['supplier_id']);
+
+            if (!empty($data['customer']['email'])) {
+                sendOrderConfirmationToCustomer(
+                    $completedOrder,
+                    $data['customer'],
+                    $supplierData
+                );
+            }
+
+            if ($supplierData && !empty($supplierData['email'])) {
+                sendOrderNotificationToSupplier(
+                    $completedOrder,
+                    $data['customer'],
+                    $supplierData
+                );
+            }
+        } catch (Throwable $mailError) {
+            error_log('Mail error: ' . $mailError->getMessage());
+        }
+
+        return $completedOrder;
+
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -248,4 +257,3 @@ SQL;
         throw $e;
     }
 }
-

@@ -49,7 +49,7 @@ export function CartProvider({ children }: CartProviderProps) {
         const existingItem = prev.find(
           (cartItem) =>
             cartItem.mealId === item.mealId &&
-            cartItem.supplierId === currentSupplierId
+            cartItem.supplierId === currentSupplierId,
         );
 
         if (existingItem) {
@@ -57,7 +57,7 @@ export function CartProvider({ children }: CartProviderProps) {
             cartItem.mealId === item.mealId &&
             cartItem.supplierId === currentSupplierId
               ? { ...cartItem, quantity: cartItem.quantity + 1 }
-              : cartItem
+              : cartItem,
           );
         }
 
@@ -72,7 +72,7 @@ export function CartProvider({ children }: CartProviderProps) {
         ];
       });
     },
-    [selectedSupplier]
+    [selectedSupplier],
   );
 
   const removeFromCart = useCallback((mealId: string) => {
@@ -81,6 +81,18 @@ export function CartProvider({ children }: CartProviderProps) {
 
   const clearCart = useCallback(() => {
     setCartItems([]);
+  }, []);
+
+  const updateQuantity = useCallback((mealId: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCartItems((prev) => prev.filter((item) => item.mealId !== mealId));
+      return;
+    }
+    setCartItems((prev) =>
+      prev.map((item) =>
+        item.mealId === mealId ? { ...item, quantity } : item,
+      ),
+    );
   }, []);
 
   const cartItemCount = useMemo(() => {
@@ -94,8 +106,16 @@ export function CartProvider({ children }: CartProviderProps) {
       addToCart,
       removeFromCart,
       clearCart,
+      updateQuantity, // NEU
     }),
-    [cartItems, cartItemCount, addToCart, removeFromCart, clearCart]
+    [
+      cartItems,
+      cartItemCount,
+      addToCart,
+      removeFromCart,
+      clearCart,
+      updateQuantity,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

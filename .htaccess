@@ -1,0 +1,18 @@
+Options -Indexes
+DirectoryIndex index.html index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Backend komplett aus dem React-Fallback herausnehmen
+    RewriteRule ^backend(/|$) - [L]
+
+    # Existierende Dateien und Ordner normal ausliefern
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # React SPA-Fallback
+    RewriteRule ^ dist/index.html [L]
+</IfModule>

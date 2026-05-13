@@ -1,7 +1,7 @@
 import { ShoppingCart, User } from "lucide-react";
 
 import type { Client } from "../types/client";
-import type { Supplier } from "../contexts/supplier-context";
+import type { Supplier } from "../contexts/SupplierContext";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -20,7 +20,7 @@ type HeaderProps = {
   onOrdersClick: () => void;
   onProfileClick: () => void;
   onHeaderDialogChange: (
-    value: "ueber-marie" | "liefergebiete" | "kontakt" | "faq" | null
+    value: "ueber-marie" | "liefergebiete" | "kontakt" | "faq" | null,
   ) => void;
 };
 
@@ -37,7 +37,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+      <div className="mx-auto flex items-center justify-between gap-4 px-4 py-3">
         <div className="flex min-w-[140px] items-center">
           <a href="/" className="text-xl font-bold tracking-tight">
             Marie kocht
@@ -45,13 +45,22 @@ export function Header({
         </div>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <Button variant="outline" onClick={() => onHeaderDialogChange("ueber-marie")}>
+          <Button
+            variant="outline"
+            onClick={() => onHeaderDialogChange("ueber-marie")}
+          >
             Über Marie
           </Button>
-          <Button variant="outline" onClick={() => onHeaderDialogChange("liefergebiete")}>
+          <Button
+            variant="outline"
+            onClick={() => onHeaderDialogChange("liefergebiete")}
+          >
             Liefergebiete
           </Button>
-          <Button variant="outline" onClick={() => onHeaderDialogChange("kontakt")}>
+          <Button
+            variant="outline"
+            onClick={() => onHeaderDialogChange("kontakt")}
+          >
             Kontakt
           </Button>
           <Button variant="outline" onClick={() => onHeaderDialogChange("faq")}>
@@ -72,14 +81,24 @@ export function Header({
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onCartClick}>Warenkorb</DropdownMenuItem>
-                <DropdownMenuItem onClick={onOrdersClick}>Bestellungen</DropdownMenuItem>
-                <DropdownMenuItem onClick={onProfileClick}>Profil</DropdownMenuItem>
+                <DropdownMenuItem onClick={onCartClick}>
+                  Warenkorb
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOrdersClick}>
+                  Bestellungen
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onProfileClick}>
+                  Profil
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
 
-          <Button variant="default" className="relative gap-2" onClick={onCartClick}>
+          <Button
+            variant="default"
+            className="relative gap-2"
+            onClick={onCartClick}
+          >
             <ShoppingCart className="size-4" />
             <span className="hidden sm:inline">Warenkorb</span>
             {cartItemCount > 0 && (
@@ -93,7 +112,7 @@ export function Header({
 
       {selectedSupplier && (
         <div className="border-t px-4 py-2">
-          <div className="mx-auto flex max-w-7xl items-center gap-2 text-sm">
+          <div className="mx-auto flex items-center gap-2 text-sm">
             <span>Ausgewählt:</span>
             <span className="font-medium">{selectedSupplier.fullName}</span>
           </div>

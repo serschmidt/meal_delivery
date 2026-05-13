@@ -1,55 +1,29 @@
 <?php
+// /src/meals.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/helpers.php';
 
-// -----------------------------------------------
-// Hilfsfunktionen (UUID‑Konvertierung)
-// -----------------------------------------------
-if (!function_exists('generateUuid')) {
-    function generateUuid(): string
-    {
-        $data = random_bytes(16);
-        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-
-        $hex = bin2hex($data);
-
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split($hex, 4));
-    }
-}
-
-if (!function_exists('uuidToBin')) {
-    function uuidToBin(string $uuid): string
-    {
-        return hex2bin(str_replace('-', '', $uuid));
-    }
-}
-
-if (!function_exists('binToUuid')) {
-    function binToUuid(string $binary): string
-    {
-        $hex = bin2hex($binary);
-
-        return sprintf(
-            '%s-%s-%s-%s-%s',
-            substr($hex, 0, 8),
-            substr($hex, 8, 4),
-            substr($hex, 12, 4),
-            substr($hex, 16, 4),
-            substr($hex, 20, 12)
-        );
-    }
+function mapMealRowToApi(array $row): array
+{
+    return [
+        'id' => $row['id'],
+        'name' => $row['name'],
+        'price' => isset($row['price']) ? round((float) $row['price'], 2) : 0,
+        'description' => $row['description'],
+        'imageUrl' => $row['image_url'],
+        'available' => (bool) $row['available'],
+    ];
 }
 
 // -----------------------------------------------
 // GET /meals – existiert bereits
 // -----------------------------------------------
-
 function getAllMeals(): array
 {
     $sql = "
         SELECT
-            BIN_TO_UUID(m.id) AS id,
+            m.id,
             m.name,
             m.price,
             m.description,
@@ -60,13 +34,12 @@ function getAllMeals(): array
     ";
 
     $stmt = db()->query($sql);
-    $rows = $stmt->fetchAll();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    foreach ($rows as &$row) {
-        $row['available'] = (bool)$row['available'];
-    }
-
-    return $rows;
+    return array_map(function (array $row): array {
+        $row['id'] = binToUuid($row['id']);
+        return mapMealRowToApi($row);
+    }, $rows);
 }
 
 // -----------------------------------------------
@@ -78,7 +51,7 @@ function createMeal(array $data): array
     $name = trim((string)($data['name'] ?? ''));
     $price = $data['price'] ?? null;
     $description = trim((string)($data['description'] ?? ''));
-    $imageUrl = trim((string)($data['image_url'] ?? ''));
+    $imageUrl = trim((string)($data['imageUrl'] ?? $data['image_url'] ?? ''));
     $available = $data['available'] ?? true;
 
     if ($name === '') {
@@ -89,7 +62,8 @@ function createMeal(array $data): array
         throw new InvalidArgumentException('price must be numeric');
     }
 
-    $id = uuidToBin(generateUuid());
+    $uuid = generateUuid();
+    $id = uuidToBin($uuid);
 
     $sql = "
         INSERT INTO meals (id, available, description, image_url, name, price)
@@ -107,12 +81,12 @@ function createMeal(array $data): array
     ]);
 
     return [
-        'id' => binToUuid($id),
-        'available' => (bool)$available,
-        'description' => $description !== '' ? $description : null,
-        'image_url' => $imageUrl !== '' ? $imageUrl : null,
+        'id' => $uuid,
         'name' => $name,
-        'price' => (float)$price,
+        'price' => (float) $price,
+        'description' => $description !== '' ? $description : null,
+        'imageUrl' => $imageUrl !== '' ? $imageUrl : null,
+        'available' => (bool) $available,
     ];
 }
 
@@ -125,7 +99,7 @@ function updateMeal(string $uuid, array $data): ?array
     $name = trim((string)($data['name'] ?? ''));
     $price = $data['price'] ?? null;
     $description = trim((string)($data['description'] ?? ''));
-    $imageUrl = trim((string)($data['image_url'] ?? ''));
+    $imageUrl = trim((string)($data['imageUrl'] ?? $data['image_url'] ?? ''));
     $available = $data['available'] ?? true;
 
     if ($name === '') {
@@ -138,16 +112,14 @@ function updateMeal(string $uuid, array $data): ?array
 
     $id = uuidToBin($uuid);
 
-    // Zuerst prüfen, ob Meal überhaupt existiert
     $sql = "SELECT id FROM meals WHERE id = :id";
     $stmt = db()->prepare($sql);
     $stmt->execute([':id' => $id]);
 
     if ($stmt->rowCount() === 0) {
-        return null; // Meal not found
+        return null;
     }
 
-    // Nun aktualisieren
     $sql = "
         UPDATE meals
         SET
@@ -171,11 +143,11 @@ function updateMeal(string $uuid, array $data): ?array
 
     return [
         'id' => $uuid,
-        'available' => (bool)$available,
-        'description' => $description !== '' ? $description : null,
-        'image_url' => $imageUrl !== '' ? $imageUrl : null,
         'name' => $name,
-        'price' => (float)$price,
+        'price' => (float) $price,
+        'description' => $description !== '' ? $description : null,
+        'imageUrl' => $imageUrl !== '' ? $imageUrl : null,
+        'available' => (bool) $available,
     ];
 }
 
