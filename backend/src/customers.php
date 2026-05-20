@@ -1,13 +1,35 @@
 <?php
+// src/customers.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../src/mailer.php';
+
+function normalizeNullableString(mixed $value): ?string
+{
+    if ($value === null) {
+        return null;
+    }
+
+    $value = trim((string) $value);
+
+    return $value === '' ? null : $value;
+}
+
+function normalizeEmail(string $email): string
+{
+    return mb_strtolower(trim($email));
+}
 
 function findCustomerByEmail(string $email): ?array
 {
     $sql = 'SELECT * FROM customers WHERE email = :email LIMIT 1';
 
     $stmt = db()->prepare($sql);
-    $stmt->execute([':email' => $email]);
+    $stmt->execute([
+        ':email' => normalizeEmail($email),
+    ]);
+
     $row = $stmt->fetch();
 
     return $row ?: null;
@@ -15,17 +37,26 @@ function findCustomerByEmail(string $email): ?array
 
 function upsertCustomerFromOrder(array $data): array
 {
-    // Erwartet z.B.:
-    // full_name, email, phone, street, house_number, postal_code, city, notes?
-
     if (empty($data['email'])) {
         throw new InvalidArgumentException('email is required for customer');
     }
 
-    $existing = findCustomerByEmail($data['email']);
+    $email = normalizeEmail((string) $data['email']);
+    $existing = findCustomerByEmail($email);
+
+    $incoming = [
+        'full_name' => normalizeNullableString($data['full_name'] ?? null),
+        'phone' => normalizeNullableString($data['phone'] ?? null),
+        'street' => normalizeNullableString($data['street'] ?? null),
+        'house_number' => normalizeNullableString($data['house_number'] ?? null),
+        'postal_code' => normalizeNullableString($data['postal_code'] ?? null),
+        'city' => normalizeNullableString($data['city'] ?? null),
+        'notes' => normalizeNullableString($data['notes'] ?? null),
+    ];
 
     if ($existing === null) {
-        // create new
+        $customerId = generateUuid();
+
         $sql = <<<SQL
 INSERT INTO customers (
     id,
@@ -54,59 +85,67 @@ INSERT INTO customers (
 )
 SQL;
 
-        $customerId = generateUuid(); // gibt string(36) zurück
-
         $stmt = db()->prepare($sql);
         $stmt->execute([
-            ':id'           => $customerId,
-            ':full_name'    => $data['full_name']    ?? '',
-            ':email'        => $data['email'],
-            ':phone'        => $data['phone']        ?? '',
-            ':street'       => $data['street']       ?? '',
-            ':house_number' => $data['house_number'] ?? '',
-            ':postal_code'  => $data['postal_code']  ?? '',
-            ':city'         => $data['city']         ?? '',
-            ':notes'        => $data['notes']        ?? '',
+            ':id' => $customerId,
+            ':full_name' => $incoming['full_name'] ?? '',
+            ':email' => $email,
+            ':phone' => $incoming['phone'],
+            ':street' => $incoming['street'] ?? '',
+            ':house_number' => $incoming['house_number'] ?? '',
+            ':postal_code' => $incoming['postal_code'] ?? '',
+            ':city' => $incoming['city'] ?? '',
+            ':notes' => $incoming['notes'],
         ]);
 
         return [
-            'id'    => $customerId,
-            'email' => $data['email'],
+            'id' => $customerId,
+            'email' => $email,
         ];
     }
 
-    // update existing
+    $updated = [
+        'full_name' => $incoming['full_name'] ?? $existing['full_name'],
+        'phone' => $incoming['phone'] ?? $existing['phone'],
+        'street' => $incoming['street'] ?? $existing['street'],
+        'house_number' => $incoming['house_number'] ?? $existing['house_number'],
+        'postal_code' => $incoming['postal_code'] ?? $existing['postal_code'],
+        'city' => $incoming['city'] ?? $existing['city'],
+        'notes' => $incoming['notes'] ?? $existing['notes'],
+    ];
+
     $sql = <<<SQL
 UPDATE customers
 SET
-    full_name    = :full_name,
-    phone        = :phone,
-    street       = :street,
+    full_name = :full_name,
+    phone = :phone,
+    street = :street,
     house_number = :house_number,
-    postal_code  = :postal_code,
-    city         = :city,
-    notes        = :notes,
-    updated_at   = NOW()
-WHERE email = :email
+    postal_code = :postal_code,
+    city = :city,
+    notes = :notes,
+    updated_at = NOW()
+WHERE id = :id
 SQL;
 
     $stmt = db()->prepare($sql);
     $stmt->execute([
-        ':full_name'    => $data['full_name']    ?? $existing['full_name'],
-        ':phone'        => $data['phone']        ?? $existing['phone'],
-        ':street'       => $data['street']       ?? $existing['street'],
-        ':house_number' => $data['house_number'] ?? $existing['house_number'],
-        ':postal_code'  => $data['postal_code']  ?? $existing['postal_code'],
-        ':city'         => $data['city']         ?? $existing['city'],
-        ':notes'        => $data['notes']        ?? $existing['notes'],
-        ':email'        => $existing['email'],
+        ':id' => $existing['id'],
+        ':full_name' => $updated['full_name'],
+        ':phone' => $updated['phone'],
+        ':street' => $updated['street'],
+        ':house_number' => $updated['house_number'],
+        ':postal_code' => $updated['postal_code'],
+        ':city' => $updated['city'],
+        ':notes' => $updated['notes'],
     ]);
 
     return [
-        'id'    => $existing['id'],
-        'email' => $existing['email'],
+        'id' => $existing['id'],
+        'email' => $email,
     ];
 }
+
 function createOrder(array $data): array
 {
     if (!isset($data['customer']) || !is_array($data['customer'])) {
@@ -121,10 +160,10 @@ function createOrder(array $data): array
     if (empty($data['items']) || !is_array($data['items'])) {
         throw new InvalidArgumentException('items are required');
     }
-    if (empty($data['delivery_address'])) {
+    if (empty($data['delivery_address']) || !is_array($data['delivery_address'])) {
         throw new InvalidArgumentException('delivery_address is required');
     }
-    if (empty($data['billing_address'])) {
+    if (empty($data['billing_address']) || !is_array($data['billing_address'])) {
         throw new InvalidArgumentException('billing_address is required');
     }
 
@@ -225,35 +264,81 @@ SQL);
         // 6. Bestellung abrufen
         $completedOrder = getOrderById($orderId);
 
+        if ($completedOrder === null) {
+            throw new RuntimeException('Order could not be loaded after creation');
+        }
+
         // 7. E-Mails versenden – nach commit, außerhalb der Transaktion
         try {
             $supplierData = getSupplierById($data['supplier_id']);
 
+            error_log('MAIL DEBUG customer=' . json_encode($data['customer'], JSON_UNESCAPED_UNICODE));
+            error_log('MAIL DEBUG supplier=' . json_encode($supplierData, JSON_UNESCAPED_UNICODE));
+            error_log('MAIL DEBUG order=' . json_encode($completedOrder, JSON_UNESCAPED_UNICODE));
+
             if (!empty($data['customer']['email'])) {
+                error_log('MAIL DEBUG sending customer confirmation to ' . $data['customer']['email']);
+
                 sendOrderConfirmationToCustomer(
                     $completedOrder,
                     $data['customer'],
-                    $supplierData
+                    $supplierData ?? []
                 );
+
+                error_log('MAIL DEBUG customer confirmation sent');
             }
 
-            if ($supplierData && !empty($supplierData['email'])) {
+            if (!empty($supplierData['email'])) {
+                error_log('MAIL DEBUG sending supplier notification to ' . $supplierData['email']);
+
                 sendOrderNotificationToSupplier(
                     $completedOrder,
                     $data['customer'],
                     $supplierData
                 );
+
+                error_log('MAIL DEBUG supplier notification sent');
             }
         } catch (Throwable $mailError) {
-            error_log('Mail error: ' . $mailError->getMessage());
+            error_log('MAIL ERROR message=' . $mailError->getMessage());
+            error_log('MAIL ERROR file=' . $mailError->getFile() . ':' . $mailError->getLine());
+            error_log('MAIL ERROR trace=' . $mailError->getTraceAsString());
         }
 
         return $completedOrder;
-
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
         throw $e;
     }
+}
+
+function getAllCustomers(): array
+{
+    $stmt = db()->query("
+        SELECT id, full_name, email, phone, street, house_number, postal_code, city, notes, created_at, updated_at
+        FROM customers
+        ORDER BY created_at DESC
+    ");
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function getCustomerById(string $customerId): ?array
+{
+    $stmt = db()->prepare("
+        SELECT id, full_name, email, phone, street, house_number, postal_code, city, notes, created_at, updated_at
+        FROM customers
+        WHERE id = :id
+        LIMIT 1
+    ");
+
+    $stmt->execute([
+        ':id' => $customerId,
+    ]);
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
 }

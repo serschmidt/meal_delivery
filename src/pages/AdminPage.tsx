@@ -1,12 +1,24 @@
 import { useState } from "react";
-import { UtensilsCrossed, CalendarDays, Truck, ShoppingBag } from "lucide-react";
+import {
+  UtensilsCrossed,
+  CalendarDays,
+  Truck,
+  ShoppingBag,
+  Users,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import { MealsAdmin } from "../components/admin/MealsAdmin";
-import { WeeklyMenusAdmin } from "@/components/admin/WeeklyMenusAdmin";
-import { SuppliersAdmin } from "@/components/admin/SuppliersAdmin";
-import { OrdersAdmin } from "@/components/admin/OrdersAdmin";
+import { WeeklyMenusAdmin } from "../components/admin/WeeklyMenusAdmin";
+import { SuppliersAdmin } from "../components/admin/SuppliersAdmin";
+import { OrdersAdmin } from "../components/admin/OrdersAdmin";
+import { CustomersAdmin } from "../components/admin/CustomersAdmin";
 
-type AdminSection = "meals" | "weekly-menus" | "suppliers" | "orders";
+type AdminSection =
+  | "meals"
+  | "weekly-menus"
+  | "suppliers"
+  | "orders"
+  | "customers";
 
 type NavItem = {
   key: AdminSection;
@@ -15,10 +27,31 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { key: "meals", label: "Mahlzeiten", icon: <UtensilsCrossed className="size-5" /> },
-  { key: "weekly-menus", label: "Wochenmenüs", icon: <CalendarDays className="size-5" /> },
-  { key: "suppliers", label: "Lieferanten", icon: <Truck className="size-5" /> },
-  { key: "orders", label: "Bestellungen", icon: <ShoppingBag className="size-5" /> },
+  {
+    key: "meals",
+    label: "Mahlzeiten",
+    icon: <UtensilsCrossed className="size-5" />,
+  },
+  {
+    key: "weekly-menus",
+    label: "Wochenmenüs",
+    icon: <CalendarDays className="size-5" />,
+  },
+  {
+    key: "suppliers",
+    label: "Lieferanten",
+    icon: <Truck className="size-5" />,
+  },
+  {
+    key: "orders",
+    label: "Bestellungen",
+    icon: <ShoppingBag className="size-5" />,
+  },
+  {
+    key: "customers",
+    label: "Kunden",
+    icon: <Users className="size-5" />,
+  },
 ];
 
 export function AdminPage() {
@@ -56,6 +89,7 @@ export function AdminPage() {
         {activeSection === "weekly-menus" && <WeeklyMenusAdmin />}
         {activeSection === "suppliers" && <SuppliersAdmin />}
         {activeSection === "orders" && <OrdersAdmin />}
+        {activeSection === "customers" && <CustomersAdmin />}
       </main>
     </div>
   );

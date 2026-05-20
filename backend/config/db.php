@@ -1,4 +1,5 @@
 <?php
+// config/db.php
 
 function db(): PDO
 {

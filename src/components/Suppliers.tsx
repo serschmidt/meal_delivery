@@ -1,16 +1,10 @@
-import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "./ui/carousel";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Search, XCircle } from "lucide-react";
 import { Input } from "./ui/input";
+import { ScrollArea } from "./ui/scroll-area";
 import { useSupplier } from "../contexts/useSupplier";
 import { apiGet } from "../lib/api";
+import { cn } from "@/lib/utils";
 
 type SupplierAddress = {
   street: string;
@@ -37,32 +31,50 @@ type Supplier = {
   payment: SupplierPayment;
 };
 
+type DeliveryAreasResponse = {
+  id: string;
+  cities: string[];
+  postal_codes: string[];
+};
+
 type SuppliersProps = {
   searchValue: string;
   onSearchChange: (value: string) => void;
 };
 
+function hasMinimumSearchLength(value: string) {
+  return value.trim().length >= 3;
+}
+
+let initialSupplierRequestStarted = false;
+
 export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
-  const { selectSupplier, selectedSupplier } = useSupplier();
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { selectedSupplier, selectSupplier } = useSupplier();
+
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState("");
+  const [deliveryMatch, setDeliveryMatch] = useState<boolean | null>(null);
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+
+  const trimmedSearch = useMemo(() => searchValue.trim(), [searchValue]);
+  const canSearch = hasMinimumSearchLength(trimmedSearch);
 
   useEffect(() => {
+    if (initialSupplierRequestStarted) return;
+    initialSupplierRequestStarted = true;
+
     const controller = new AbortController();
 
-    const timeout = setTimeout(async () => {
+    const loadInitialSupplier = async () => {
       try {
-        setIsLoading(true);
-        setError("");
-
-        const data = await apiGet<Supplier[]>(
-          searchValue.trim() ? "suppliers/search" : "suppliers/all",
-          searchValue.trim() ? { q: searchValue } : undefined,
-          controller.signal,
+        const suppliers = await apiGet<Supplier[]>(
+          "suppliers/all",
+          undefined,
+          controller.signal
         );
 
-        setSuppliers(Array.isArray(data) ? data : []);
+        const firstSupplier = Array.isArray(suppliers) ? suppliers[0] ?? null : null;
+        selectSupplier(firstSupplier);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           return;
@@ -71,115 +83,197 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
         setError(
           err instanceof Error
             ? err.message
-            : "Fehler bei der Supplier-Suche.",
+            : "Fehler beim Laden des Liefergebiets."
         );
-      } finally {
-        setIsLoading(false);
       }
-    }, 300);
+    };
+
+    void loadInitialSupplier();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectSupplier]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    if (!selectedSupplier?.id) {
+      setCitySuggestions([]);
+      setDeliveryMatch(null);
+      setIsSearching(false);
+      return () => controller.abort();
+    }
+
+    if (trimmedSearch === "") {
+      setCitySuggestions([]);
+      setDeliveryMatch(null);
+      setError("");
+      setIsSearching(false);
+      return () => controller.abort();
+    }
+
+    if (!canSearch) {
+      setCitySuggestions([]);
+      setDeliveryMatch(null);
+      setError("");
+      setIsSearching(false);
+      return () => controller.abort();
+    }
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setError("");
+        setIsSearching(true);
+
+        const response = await apiGet<DeliveryAreasResponse>(
+          `suppliers/${selectedSupplier.id}/delivery-areas`,
+          { q: trimmedSearch },
+          controller.signal
+        );
+
+        const uniqueCities = Array.isArray(response?.cities)
+          ? Array.from(
+              new Map(
+                response.cities.map((city) => [city.trim().toLowerCase(), city])
+              ).values()
+            )
+          : [];
+
+        const postalCodes = Array.isArray(response?.postal_codes)
+          ? response.postal_codes
+          : [];
+
+        setCitySuggestions(uniqueCities);
+        setDeliveryMatch(uniqueCities.length > 0 || postalCodes.length > 0);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Fehler bei der Prüfung des Liefergebiets."
+        );
+        setCitySuggestions([]);
+        setDeliveryMatch(null);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
 
     return () => {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [searchValue]);
+  }, [trimmedSearch, canSearch, selectedSupplier?.id]);
 
-  return (
-    <section className="rounded-3xl border bg-background px-6 py-8 md:px-8">
-      <div className="mb-6 space-y-2">
-        <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Lieferanten auswählen
-        </p>
-        <h2 className="text-2xl font-bold">Wähle einen Lieferanten</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Suche direkt hier nach einem Lieferanten und wähle ihn für dein
-          Wochenmenü aus.
-        </p>
-      </div>
+  const showSuggestions =
+    trimmedSearch !== "" && canSearch && (isSearching || citySuggestions.length > 0);
 
-      <div className="mb-6">
-        <div className="relative w-full max-w-xl">
+return (
+  <section className="rounded-3xl border bg-background px-5 py-6 md:px-6 md:py-7">
+    <div
+      className={cn(
+        "grid gap-4 lg:items-start",
+        trimmedSearch !== "" && canSearch
+          ? "lg:grid-cols-[minmax(0,1fr)_280px]"
+          : "grid-cols-1"
+      )}
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            Liefergebiet prüfen
+          </p>
+          <h2 className="text-2xl font-bold">
+            Prüfen Sie, ob in Ihre Stadt oder PLZ geliefert wird
+          </h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Geben Sie mindestens 3 Buchstaben oder 3 Zahlen ein, um das
+            Liefergebiet zu prüfen.
+          </p>
+        </div>
+
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Lieferanten suchen..."
-            className="pl-9"
-            aria-label="Lieferanten suchen"
+            placeholder="Stadt oder PLZ eingeben..."
+            className="h-11 pl-9"
+            aria-label="Liefergebiet prüfen"
           />
         </div>
+
+        {trimmedSearch !== "" && !canSearch && (
+          <p className="text-sm text-muted-foreground">
+            Bitte mindestens 3 Buchstaben oder 3 Zahlen eingeben.
+          </p>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {!error && isSearching && (
+          <div className="rounded-xl border px-4 py-3 text-sm text-muted-foreground">
+            Liefergebiet wird geprüft...
+          </div>
+        )}
+
+        {!error && !isSearching && deliveryMatch === true && (
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="font-medium">Die Eingabe liegt im Liefergebiet.</p>
+            </div>
+          </div>
+        )}
+
+        {!error && !isSearching && deliveryMatch === false && (
+          <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <XCircle className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="font-medium">
+                Die Eingabe liegt aktuell nicht im Liefergebiet.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {selectedSupplier && (
-        <div className="mb-4 rounded-xl bg-primary/10 px-4 py-3 text-sm">
-          Ausgewählt:{" "}
-          <span className="font-medium">{selectedSupplier.fullName}</span>
+      {trimmedSearch !== "" && canSearch && (
+        <div className="overflow-hidden rounded-2xl border bg-background">
+          <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Passende Städte
+          </div>
+
+          <ScrollArea className="h-[212px]">
+            <div className="p-1">
+              {showSuggestions && citySuggestions.length > 0 ? (
+                citySuggestions.map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => onSearchChange(city)}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  >
+                    {city}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-3 text-sm text-muted-foreground">
+                  {isSearching
+                    ? "Städte werden gesucht..."
+                    : "Keine passenden Städte gefunden."}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </div>
       )}
-
-      {isLoading && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          Lieferanten werden geladen...
-        </p>
-      )}
-
-      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-
-      {!isLoading && !error && suppliers.length === 0 && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          Keine Lieferanten gefunden.
-        </p>
-      )}
-
-      {!error && suppliers.length > 0 && (
-        <Carousel
-          opts={{
-            align: "start",
-            slidesToScroll: 1,
-          }}
-          orientation="vertical"
-          className="w-full"
-        >
-          <CarouselContent className="-ml-1">
-            {suppliers.map((supplier) => (
-              <CarouselItem key={supplier.id} className="pl-1 md:basis-1/3">
-                <Card
-                  className={`h-[170px] cursor-pointer transition-all hover:shadow-lg ${
-                    selectedSupplier?.id === supplier.id
-                      ? "border-primary ring-1 ring-primary"
-                      : ""
-                  }`}
-                  onClick={() => selectSupplier(supplier)}
-                >
-                  <CardHeader>
-                    <CardTitle className="line-clamp-1 text-lg">
-                      {supplier.fullName}
-                    </CardTitle>
-                  </CardHeader>
-
-                  <CardContent className="space-y-1 pt-2">
-                    <p className="text-sm text-muted-foreground">
-                      {supplier.address.street} {supplier.address.houseNumber}
-                    </p>
-
-                    <p className="text-sm text-muted-foreground">
-                      {supplier.address.postalCode} {supplier.address.city}
-                    </p>
-
-                    <p className="line-clamp-1 text-xs text-muted-foreground">
-                      {supplier.email}
-                    </p>
-                  </CardContent>
-                </Card>
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-
-          <CarouselPrevious />
-          <CarouselNext />
-        </Carousel>
-      )}
-    </section>
-  );
+    </div>
+  </section>
+);
 }

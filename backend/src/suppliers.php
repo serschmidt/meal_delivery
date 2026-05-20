@@ -2,6 +2,7 @@
 // src/suppliers.php
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../src/mailer.php';
 
 function mapSupplierToApi(array $row): array
 {
@@ -27,6 +28,189 @@ function mapSupplierToApi(array $row): array
     ];
 }
 
+function normalizeGermanSearchTerm(string $value): string
+{
+    $value = trim(mb_strtolower($value, 'UTF-8'));
+
+    $value = str_replace(
+        ['ä', 'ö', 'ü', 'ß'],
+        ['ae', 'oe', 'ue', 'ss'],
+        $value
+    );
+
+    return $value;
+}
+
+function buildGermanSearchVariants(string $value): array
+{
+    $normalized = normalizeGermanSearchTerm($value);
+
+    $variants = [
+        $normalized,
+        str_replace(['ae', 'oe', 'ue'], ['a', 'o', 'u'], $normalized),
+    ];
+
+    return array_values(array_unique(array_filter($variants, static fn ($item) => $item !== '')));
+}
+
+function getSupplierDeliveryAreas(string $supplierId, string $q = ''): array
+{
+    if (trim($supplierId) === '') {
+        throw new InvalidArgumentException('supplier id is required');
+    }
+
+    $pdo = db();
+    $q = trim($q);
+
+    $normalizedCitySql = "
+        REPLACE(
+            REPLACE(
+                REPLACE(
+                    REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                REPLACE(
+                                    LOWER(city),
+                                    'ä', 'ae'
+                                ),
+                                'ö', 'oe'
+                            ),
+                            'ü', 'ue'
+                        ),
+                        'ß', 'ss'
+                    ),
+                    'ae', 'a'
+                ),
+                'oe', 'o'
+            ),
+            'ue', 'u'
+        )
+    ";
+
+    $citySql = <<<SQL
+SELECT DISTINCT city
+FROM supplier_delivery_areas
+WHERE supplier_id = :supplier_id
+  AND city <> ''
+SQL;
+
+    $postalSql = <<<SQL
+SELECT DISTINCT postal_code
+FROM supplier_delivery_areas
+WHERE supplier_id = :supplier_id
+  AND postal_code <> ''
+SQL;
+
+    $params = [
+        ':supplier_id' => $supplierId,
+    ];
+
+    if ($q !== '') {
+        $variants = buildGermanSearchVariants($q);
+
+        $cityConditions = [];
+        foreach ($variants as $index => $variant) {
+            $paramName = ":contains_q_{$index}";
+            $cityConditions[] = "{$normalizedCitySql} LIKE {$paramName}";
+            $params[$paramName] = '%' . $variant . '%';
+        }
+
+        $cityConditionSql = implode(' OR ', $cityConditions);
+
+        $citySql .= " AND (({$cityConditionSql}) OR postal_code LIKE :prefix_q)";
+        $postalSql .= " AND (({$cityConditionSql}) OR postal_code LIKE :prefix_q)";
+
+        $params[':prefix_q'] = $q . '%';
+    }
+
+    $citySql .= " ORDER BY city ASC";
+    $postalSql .= " ORDER BY postal_code ASC";
+
+    $cityStmt = $pdo->prepare($citySql);
+    $cityStmt->execute($params);
+    $cities = $cityStmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $postalStmt = $pdo->prepare($postalSql);
+    $postalStmt->execute($params);
+    $postalCodes = $postalStmt->fetchAll(PDO::FETCH_COLUMN);
+
+    return [
+        'id' => $supplierId,
+        'cities' => array_values($cities ?: []),
+        'postal_codes' => array_values($postalCodes ?: []),
+    ];
+}
+
+function findSupplierByDeliveryArea(string $query): ?array
+{
+    $query = trim($query);
+
+    if ($query === '') {
+        return null;
+    }
+
+    $sql = <<<SQL
+SELECT
+    s.id,
+    s.full_name,
+    s.email,
+    s.phone,
+    s.is_active,
+    s.created_at,
+    s.updated_at,
+    s.street,
+    s.house_number,
+    s.postal_code,
+    s.city,
+    spd.account_holder,
+    spd.iban,
+    spd.paypal_link
+FROM supplier_delivery_areas sda
+INNER JOIN suppliers s ON s.id = sda.supplier_id
+LEFT JOIN supplier_payment_details spd ON spd.supplier_id = s.id
+WHERE s.is_active = 1
+  AND (
+    sda.postal_code LIKE :postal_code
+    OR LOWER(sda.city) LIKE LOWER(:city)
+  )
+ORDER BY s.full_name
+LIMIT 1
+SQL;
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([
+        ':postal_code' => $query . '%',
+        ':city' => '%' . $query . '%',
+    ]);
+
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'id' => $row['id'],
+        'fullName' => $row['full_name'],
+        'email' => $row['email'],
+        'phone' => $row['phone'],
+        'isActive' => (bool) $row['is_active'],
+        'createdAt' => $row['created_at'],
+        'updatedAt' => $row['updated_at'],
+        'address' => [
+            'street' => $row['street'],
+            'houseNumber' => $row['house_number'],
+            'postalCode' => $row['postal_code'],
+            'city' => $row['city'],
+        ],
+        'payment' => [
+            'accountHolder' => $row['account_holder'],
+            'iban' => $row['iban'],
+            'paypalLink' => $row['paypal_link'],
+        ],
+    ];
+}
+
 function getAllSuppliers(): array
 {
     $sql = "
@@ -47,6 +231,7 @@ function getAllSuppliers(): array
             spd.paypal_link
         FROM suppliers s
         LEFT JOIN supplier_payment_details spd ON spd.supplier_id = s.id
+        WHERE s.is_active = 1
         ORDER BY s.full_name
     ";
 
@@ -86,7 +271,6 @@ function getSupplierById(string $id): ?array
 
     return $supplier ? mapSupplierToApi($supplier) : null;
 }
-
 function searchSuppliers(?string $q): array
 {
     $q = trim((string) $q);
@@ -97,6 +281,7 @@ function searchSuppliers(?string $q): array
 
     $pdo = db();
 
+    // Nur Zahlen => nur PLZ durchsuchen
     if (preg_match('/^\d+$/', $q)) {
         $sql = "
             SELECT
@@ -116,7 +301,8 @@ function searchSuppliers(?string $q): array
                 spd.paypal_link
             FROM suppliers s
             LEFT JOIN supplier_payment_details spd ON spd.supplier_id = s.id
-            WHERE s.postal_code LIKE :pattern
+            WHERE s.is_active = 1
+              AND s.postal_code LIKE :pattern
             ORDER BY s.full_name
         ";
 
@@ -128,6 +314,7 @@ function searchSuppliers(?string $q): array
         return array_map('mapSupplierToApi', $stmt->fetchAll());
     }
 
+    // Enthält Buchstaben => Name und Stadt durchsuchen
     $sql = "
         SELECT
             s.id,
@@ -146,7 +333,11 @@ function searchSuppliers(?string $q): array
             spd.paypal_link
         FROM suppliers s
         LEFT JOIN supplier_payment_details spd ON spd.supplier_id = s.id
-        WHERE LOWER(s.city) LIKE LOWER(:pattern)
+        WHERE s.is_active = 1
+          AND (
+              LOWER(s.full_name) LIKE LOWER(:pattern)
+              OR LOWER(s.city) LIKE LOWER(:pattern)
+          )
         ORDER BY s.full_name
     ";
 
@@ -155,7 +346,7 @@ function searchSuppliers(?string $q): array
         ':pattern' => $q . '%'
     ]);
 
-    return $stmt->fetchAll();
+    return array_map('mapSupplierToApi', $stmt->fetchAll());
 }
 
 function createSupplier(array $data): array

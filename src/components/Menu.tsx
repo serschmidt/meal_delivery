@@ -88,8 +88,46 @@ function formatDateRange(startDate: string | null, endDate: string | null) {
       year: "numeric",
     });
 
-  if (startDate && endDate) return `${format(startDate)} bis ${format(endDate)}`;
+  if (startDate && endDate) {
+    return `${format(startDate)} bis ${format(endDate)}`;
+  }
+
   return startDate ? format(startDate) : format(endDate!);
+}
+
+function formatDeliveryDate(value: string | null) {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("de-DE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function toLocalDateOnly(value: string | null) {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function getDaysUntilDelivery(deliveryDate: string | null) {
+  const targetDate = toLocalDateOnly(deliveryDate);
+  if (!targetDate) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffInMs = targetDate.getTime() - today.getTime();
+  return Math.round(diffInMs / (1000 * 60 * 60 * 24));
+}
+
+function isOrderable(deliveryDate: string | null) {
+  const daysUntilDelivery = getDaysUntilDelivery(deliveryDate);
+  return daysUntilDelivery !== null && daysUntilDelivery >= 7;
 }
 
 function normalizeMeal(meal: ApiMeal | null | undefined): WeeklyMeal {
@@ -105,7 +143,7 @@ function normalizeMeal(meal: ApiMeal | null | undefined): WeeklyMeal {
 
 function normalizeEntry(
   entry: ApiWeeklyMenuEntry,
-  index: number,
+  index: number
 ): WeeklyMenuEntry {
   return {
     id: entry.id ?? `entry-${index}-${crypto.randomUUID()}`,
@@ -148,6 +186,65 @@ function normalizeWeeklyMenu(menu: ApiWeeklyMenu, index: number): WeeklyMenu {
   };
 }
 
+type MealCardProps = {
+  entry: WeeklyMenuEntry;
+  menu: WeeklyMenu;
+  onAddToCart: (entry: WeeklyMenuEntry, menu: WeeklyMenu) => void;
+};
+
+function MealCard({ entry, menu, onAddToCart }: MealCardProps) {
+  const orderable = isOrderable(entry.menuDate);
+  const isDisabled = !entry.meal.available || !orderable;
+  const deliveryDateLabel = formatDeliveryDate(entry.menuDate);
+
+  return (
+    <div className="flex h-full flex-col rounded-2xl border bg-background p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {entry.dayLabel}
+      </p>
+
+      {deliveryDateLabel && (
+        <p className="mt-1 text-xs text-muted-foreground">{deliveryDateLabel}</p>
+      )}
+
+      <h3 className="mt-2 line-clamp-2 font-semibold">{entry.meal.name}</h3>
+
+      <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
+        {entry.meal.description}
+      </p>
+
+      <p className="mt-3 font-medium">€ {formatPrice(entry.meal.price)}</p>
+
+      {!entry.meal.available && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Dieses Gericht ist aktuell nicht verfügbar.
+        </p>
+      )}
+
+      {entry.meal.available && !orderable && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Nicht mehr bestellbar. Bestellungen sind nur mindestens 7 Tage vor dem
+          Lieferdatum möglich.
+        </p>
+      )}
+
+      <Button
+        type="button"
+        size="sm"
+        className="mt-auto pt-3"
+        onClick={() => onAddToCart(entry, menu)}
+        disabled={isDisabled}
+      >
+        {!entry.meal.available
+          ? "Nicht verfügbar"
+          : !orderable
+          ? "Nicht mehr bestellbar"
+          : "In den Warenkorb"}
+      </Button>
+    </div>
+  );
+}
+
 export function Menu() {
   const { addToCart } = useCart();
   const { selectedSupplier } = useSupplier();
@@ -167,7 +264,7 @@ export function Menu() {
         const data = await apiGet<ApiWeeklyMenu[]>(
           "weekly-menus",
           undefined,
-          controller.signal,
+          controller.signal
         );
 
         const normalized = Array.isArray(data)
@@ -183,19 +280,37 @@ export function Menu() {
         setError(
           err instanceof Error
             ? err.message
-            : "Fehler beim Laden der Wochenmenüs.",
+            : "Fehler beim Laden der Wochenmenüs."
         );
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadWeeklyMenus();
+    void loadWeeklyMenus();
 
     return () => {
       controller.abort();
     };
   }, []);
+
+  const handleAddToCart = (entry: WeeklyMenuEntry, menu: WeeklyMenu) => {
+    addToCart({
+      mealId: entry.meal.id,
+      weeklyMenuEntryId: entry.id,
+      weeklyMenuId: menu.id,
+      weeklyMenuLabel: menu.calendarWeek?.toString(),
+      deliveryDate: entry.menuDate,
+      name: entry.meal.name,
+      description: entry.meal.description,
+      price: entry.meal.price,
+      imageUrl: entry.meal.imageUrl,
+    });
+
+    toast.success("Zum Warenkorb hinzugefügt", {
+      description: `${entry.meal.name} wurde hinzugefügt.`,
+    });
+  };
 
   return (
     <div className="m-4 space-y-6">
@@ -244,142 +359,54 @@ export function Menu() {
                 </div>
               </CardHeader>
 
-              <CardContent>
-                <div className="grid gap-6 lg:grid-cols-[180px_1fr]">
-                  <div className="overflow-hidden rounded-2xl border bg-muted/30">
-                    {menu.imageUrl ? (
-                      <img
-                        src={menu.imageUrl}
-                        alt={menu.title}
-                        className="h-[160px] w-full object-cover lg:h-full"
-                      />
-                    ) : (
-                      <div className="flex h-[160px] items-center justify-center px-4 text-center text-sm text-muted-foreground">
-                        Kein Bild vorhanden
-                      </div>
-                    )}
-                  </div>
+              <CardContent className="space-y-5">
+                <div className="overflow-hidden rounded-2xl border bg-muted/30">
+                  {menu.imageUrl ? (
+                    <img
+                      src={menu.imageUrl}
+                      alt={menu.title}
+                      className="h-[220px] w-full object-cover md:h-[280px]"
+                    />
+                  ) : (
+                    <div className="flex h-[180px] items-center justify-center px-4 text-center text-sm text-muted-foreground md:h-[220px]">
+                      Kein Bild vorhanden
+                    </div>
+                  )}
+                </div>
 
-                  <div className="space-y-4">
-                    {menu.entries.length === 0 && (
-                      <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground">
-                        Für dieses Wochenmenü sind aktuell noch keine Gerichte
-                        eingetragen.
-                      </div>
-                    )}
+                <div className="space-y-4">
+                  {menu.entries.length === 0 && (
+                    <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground">
+                      Für dieses Wochenmenü sind aktuell noch keine Gerichte
+                      eingetragen.
+                    </div>
+                  )}
 
-                    {firstRow.length > 0 && (
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        {firstRow.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="flex h-full flex-col rounded-2xl border bg-background p-4 shadow-sm"
-                          >
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              {entry.dayLabel}
-                            </p>
+                  {firstRow.length > 0 && (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {firstRow.map((entry) => (
+                        <MealCard
+                          key={entry.id}
+                          entry={entry}
+                          menu={menu}
+                          onAddToCart={handleAddToCart}
+                        />
+                      ))}
+                    </div>
+                  )}
 
-                            <h3 className="mt-2 line-clamp-2 font-semibold">
-                              {entry.meal.name}
-                            </h3>
-
-                            <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
-                              {entry.meal.description}
-                            </p>
-
-                            <p className="mt-3 font-medium">
-                              € {formatPrice(entry.meal.price)}
-                            </p>
-
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="mt-auto pt-3"
-                              onClick={() => {
-                                addToCart({
-                                  mealId: entry.meal.id,
-                                  weeklyMenuEntryId: entry.id,
-                                  weeklyMenuId: menu.id,
-                                  weeklyMenuLabel:
-                                    menu.calendarWeek?.toString(),
-                                  deliveryDate: entry.menuDate, // ← NEU – war vergessen
-                                  name: entry.meal.name,
-                                  description: entry.meal.description,
-                                  price: entry.meal.price,
-                                  imageUrl: entry.meal.imageUrl,
-                                });
-
-                                toast.success("Zum Warenkorb hinzugefügt", {
-                                  description: `${entry.meal.name} wurde hinzugefügt.`,
-                                });
-                              }}
-                              disabled={!entry.meal.available}
-                            >
-                              {entry.meal.available
-                                ? "In den Warenkorb"
-                                : "Nicht verfügbar"}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {secondRow.length > 0 && (
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {secondRow.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="flex h-full flex-col rounded-2xl border bg-background p-4 shadow-sm"
-                          >
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              {entry.dayLabel}
-                            </p>
-
-                            <h3 className="mt-2 line-clamp-2 font-semibold">
-                              {entry.meal.name}
-                            </h3>
-
-                            <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
-                              {entry.meal.description}
-                            </p>
-
-                            <p className="mt-3 font-medium">
-                              € {formatPrice(entry.meal.price)}
-                            </p>
-
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="mt-auto pt-3"
-                              onClick={() => {
-                                addToCart({
-                                  mealId: entry.meal.id,
-                                  weeklyMenuEntryId: entry.id,
-                                  weeklyMenuId: menu.id,
-                                  weeklyMenuLabel:
-                                    menu.calendarWeek?.toString(),
-                                  deliveryDate: entry.menuDate, // NEU – kommt aus WeeklyMenuEntry
-                                  name: entry.meal.name,
-                                  description: entry.meal.description,
-                                  price: entry.meal.price,
-                                  imageUrl: entry.meal.imageUrl,
-                                });
-
-                                toast.success("Zum Warenkorb hinzugefügt", {
-                                  description: `${entry.meal.name} wurde hinzugefügt.`,
-                                });
-                              }}
-                              disabled={!entry.meal.available}
-                            >
-                              {entry.meal.available
-                                ? "In den Warenkorb"
-                                : "Nicht verfügbar"}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {secondRow.length > 0 && (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {secondRow.map((entry) => (
+                        <MealCard
+                          key={entry.id}
+                          entry={entry}
+                          menu={menu}
+                          onAddToCart={handleAddToCart}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

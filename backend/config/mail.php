@@ -2,11 +2,11 @@
 // config/mail.php
 
 return [
-    'smtp_host'     => 'smtp.alphahosting.de', // ← später anpassen
+    'smtp_host'     => 'smtp.web.de',
     'smtp_port'     => 587,
     'smtp_secure'   => 'tls',
-    'smtp_user'     => 'bestellung@liefermonopol.de', // ← später anpassen
-    'smtp_password' => 'DEIN_PASSWORT',               // ← später anpassen
-    'from_email'    => 'bestellung@liefermonopol.de',
+    'smtp_user'     => 'info.liefermonopol@web.de',
+    'smtp_password' => 'Di01Ci03Be09To21.',
+    'from_email'    => 'info.liefermonopol@web.de',
     'from_name'     => 'Marie kocht – Liefermonopol',
 ];

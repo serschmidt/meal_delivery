@@ -34,7 +34,6 @@ type AddressForm = {
   city: string;
 };
 
-// Types für die Erfolgsansicht
 type OrderResponse = {
   id: string;
   created_at: string;
@@ -64,7 +63,20 @@ type SupplierInfo = {
   payment?: SupplierPayment;
 };
 
-// Hilfsfunktion oben in der Datei:
+type DeliveryAreasResponse = {
+  id: string;
+  cities: string[];
+  postal_codes: string[];
+};
+
+function normalizePostalCode(value: string) {
+  return value.replace(/\D/g, "").trim();
+}
+
+function isGermanPostalCode(value: string) {
+  return /^[0-9]{5}$/.test(value);
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("de-DE", {
     day: "2-digit",
@@ -95,36 +107,45 @@ export function CheckoutPage() {
     postal_code: "",
     city: "",
   });
-  const [widerrufsDialogOpen, setWiderrufsDialogOpen] = useState(false);
 
+  const [widerrufsDialogOpen, setWiderrufsDialogOpen] = useState(false);
   const [widerrufsAccepted, setWiderrufsAccepted] = useState(false);
+  const [phoneAccepted, setPhoneAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
-  // Neue States:
   const [completedOrders, setCompletedOrders] = useState<OrderResponse[]>([]);
   const [supplierInfo, setSupplierInfo] = useState<SupplierInfo | null>(null);
 
-  // Lieferadresse = Kundenadresse
+  const normalizedDeliveryPostalCode = normalizePostalCode(customer.postal_code);
+
   const deliveryAddress: AddressForm = {
-    street: customer.street,
-    house_number: customer.house_number,
-    postal_code: customer.postal_code,
-    city: customer.city,
+    street: customer.street.trim(),
+    house_number: customer.house_number.trim(),
+    postal_code: normalizedDeliveryPostalCode,
+    city: customer.city.trim(),
   };
 
-  const effectiveBillingAddress = sameAsDelivery
+  const normalizedBillingPostalCode = normalizePostalCode(billingAddress.postal_code);
+
+  const effectiveBillingAddress: AddressForm = sameAsDelivery
     ? deliveryAddress
-    : billingAddress;
+    : {
+        street: billingAddress.street.trim(),
+        house_number: billingAddress.house_number.trim(),
+        postal_code: normalizedBillingPostalCode,
+        city: billingAddress.city.trim(),
+      };
 
   const totalAmount = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
-    0,
+    0
   );
 
-  // Alle Items haben denselben Lieferanten (Regel: 1 Bestellung = 1 Lieferant)
   const supplierId = cartItems[0]?.supplierId ?? null;
   const supplierName = cartItems[0]?.supplierName ?? null;
+
+  const areRequiredCheckboxesAccepted = widerrufsAccepted && phoneAccepted;
 
   const handleCustomerChange = (field: keyof CustomerForm, value: string) => {
     setCustomer((prev) => ({ ...prev, [field]: value }));
@@ -135,22 +156,57 @@ export function CheckoutPage() {
   };
 
   const isFormValid = () => {
+    const billingValid =
+      sameAsDelivery ||
+      (
+        billingAddress.street.trim() !== "" &&
+        billingAddress.house_number.trim() !== "" &&
+        billingAddress.city.trim() !== "" &&
+        isGermanPostalCode(normalizedBillingPostalCode)
+      );
+
     return (
       customer.full_name.trim() !== "" &&
       customer.email.trim() !== "" &&
       customer.street.trim() !== "" &&
       customer.house_number.trim() !== "" &&
-      customer.postal_code.trim() !== "" &&
       customer.city.trim() !== "" &&
-      widerrufsAccepted &&
+      isGermanPostalCode(normalizedDeliveryPostalCode) &&
+      billingValid &&
+      areRequiredCheckboxesAccepted &&
       cartItems.length > 0 &&
       supplierId !== null
     );
   };
 
   const handleSubmit = async () => {
-    if (!isFormValid()) return;
-    setIsSubmitting(true);
+    if (isSubmitting) {
+      return;
+    }
+
+    if (!widerrufsAccepted || !phoneAccepted) {
+      toast.error(
+        "Bitte aktivieren Sie beide Checkboxen, bevor Sie die Bestellung absenden."
+      );
+      return;
+    }
+
+    if (!isFormValid()) {
+      toast.error("Bitte füllen Sie alle Pflichtfelder korrekt aus.");
+      return;
+    }
+
+    if (!isGermanPostalCode(normalizedDeliveryPostalCode)) {
+      toast.error(
+        "Bitte geben Sie eine gültige 5-stellige PLZ für die Lieferadresse ein."
+      );
+      return;
+    }
+
+    if (!supplierId) {
+      toast.error("Kein Lieferant ausgewählt.");
+      return;
+    }
 
     const groupedByMenu = cartItems.reduce<Record<string, typeof cartItems>>(
       (acc, item) => {
@@ -159,11 +215,36 @@ export function CheckoutPage() {
         acc[key].push(item);
         return acc;
       },
-      {},
+      {}
     );
 
+    setIsSubmitting(true);
+
     try {
-      // Lieferantendaten laden
+      const deliveryAreas = await apiGet<DeliveryAreasResponse>(
+        `suppliers/${supplierId}/delivery-areas`,
+        { q: normalizedDeliveryPostalCode }
+      );
+
+      const postalCodes = Array.isArray(deliveryAreas?.postal_codes)
+        ? deliveryAreas.postal_codes
+        : [];
+
+      const normalizedPostalCodes = postalCodes.map((code) =>
+        normalizePostalCode(code)
+      );
+
+      const isPostalCodeAllowed = normalizedPostalCodes.includes(
+        normalizedDeliveryPostalCode
+      );
+
+      if (!isPostalCodeAllowed) {
+        toast.error(
+          "Die angegebene Liefer-PLZ liegt nicht im Liefergebiet dieses Anbieters."
+        );
+        return;
+      }
+
       const supplier = await apiGet<SupplierInfo>(`suppliers/${supplierId}`);
       setSupplierInfo(supplier);
 
@@ -171,7 +252,18 @@ export function CheckoutPage() {
 
       for (const [menuId, items] of Object.entries(groupedByMenu)) {
         const payload = {
-          customer: { ...customer },
+          customer: {
+            ...customer,
+            full_name: customer.full_name.trim(),
+            email: customer.email.trim(),
+            phone: customer.phone.trim(),
+            street: customer.street.trim(),
+            house_number: customer.house_number.trim(),
+            postal_code: normalizedDeliveryPostalCode,
+            city: customer.city.trim(),
+            notes: customer.notes.trim(),
+            phone_contact_accepted: phoneAccepted,
+          },
           supplier_id: supplierId,
           weekly_menu_id: menuId,
           billing_address: effectiveBillingAddress,
@@ -197,7 +289,6 @@ export function CheckoutPage() {
     }
   };
 
-  // ── Erfolgsseite ──────────────────────────────────────────────────────────
   if (orderSuccess) {
     const totalAll = completedOrders.reduce((s, o) => s + o.total_price, 0);
     const hasIban = !!supplierInfo?.payment?.iban;
@@ -205,8 +296,7 @@ export function CheckoutPage() {
 
     return (
       <div className="mx-auto max-w-2xl space-y-6 py-8">
-        {/* Header */}
-        <div className="text-center space-y-2">
+        <div className="space-y-2 text-center">
           <div className="text-5xl">✓</div>
           <h1 className="text-2xl font-bold">Bestellung erfolgreich!</h1>
           <p className="text-muted-foreground">
@@ -221,14 +311,13 @@ export function CheckoutPage() {
           </p>
         </div>
 
-        {/* Bestellübersicht */}
         {completedOrders.map((order, i) => (
-          <section key={order.id} className="rounded-lg border p-6 space-y-4">
+          <section key={order.id} className="space-y-4 rounded-lg border p-6">
             <h2 className="text-lg font-semibold">
               Bestellung {completedOrders.length > 1 ? i + 1 : ""}
             </h2>
 
-            <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-1">
+            <div className="space-y-1 rounded-md bg-muted/50 px-4 py-3 text-sm">
               <p>
                 <span className="font-medium">Lieferant:</span>{" "}
                 {supplierInfo?.fullName ?? "–"}
@@ -274,20 +363,18 @@ export function CheckoutPage() {
           </section>
         ))}
 
-        {/* Gesamtsumme bei mehreren Bestellungen */}
         {completedOrders.length > 1 && (
-          <div className="flex items-center justify-between rounded-lg border p-4 font-bold text-lg">
+          <div className="flex items-center justify-between rounded-lg border p-4 text-lg font-bold">
             <span>Gesamtsumme</span>
             <span>€ {totalAll.toFixed(2)}</span>
           </div>
         )}
 
-        {/* Zahlungsaufforderung */}
-        <section className="rounded-lg border p-6 space-y-4">
+        <section className="space-y-4 rounded-lg border p-6">
           <h2 className="text-lg font-semibold">Zahlung</h2>
 
           {hasIban && (
-            <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-2">
+            <div className="space-y-2 rounded-md bg-muted/50 px-4 py-3 text-sm">
               <p className="font-medium">Überweisung</p>
               <p>
                 <span className="text-muted-foreground">Kontoinhaber: </span>
@@ -310,13 +397,13 @@ export function CheckoutPage() {
           )}
 
           {hasPaypal && (
-            <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-2">
+            <div className="space-y-2 rounded-md bg-muted/50 px-4 py-3 text-sm">
               <p className="font-medium">PayPal</p>
               <a
                 href={supplierInfo?.payment?.paypalLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-block rounded bg-blue-600 px-4 py-2 text-white text-sm font-medium hover:bg-blue-700"
+                className="inline-block rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 Jetzt per PayPal bezahlen
               </a>
@@ -330,15 +417,14 @@ export function CheckoutPage() {
           )}
         </section>
 
-        {/* Lieferadresse */}
-        <section className="rounded-lg border p-6 space-y-2 text-sm">
+        <section className="space-y-2 rounded-lg border p-6 text-sm">
           <h2 className="text-lg font-semibold">Lieferadresse</h2>
           <p>{customer.full_name}</p>
           <p>
             {customer.street} {customer.house_number}
           </p>
           <p>
-            {customer.postal_code} {customer.city}
+            {normalizedDeliveryPostalCode} {customer.city}
           </p>
           {customer.phone && <p>Tel: {customer.phone}</p>}
           {customer.notes && (
@@ -346,7 +432,6 @@ export function CheckoutPage() {
           )}
         </section>
 
-        {/* Hinweis + Button */}
         <div className="rounded-md bg-muted/50 p-4 text-sm text-muted-foreground">
           <p>
             Diese Übersicht ist nur einmalig sichtbar. Eine Kopie wurde an{" "}
@@ -364,7 +449,6 @@ export function CheckoutPage() {
     );
   }
 
-  // ── Leerer Warenkorb ──────────────────────────────────────────────────────
   if (cartItems.length === 0) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 py-12 text-center">
@@ -374,7 +458,6 @@ export function CheckoutPage() {
     );
   }
 
-  // ── Kein Lieferant ausgewählt ─────────────────────────────────────────────
   if (!supplierId) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 py-12 text-center">
@@ -389,12 +472,10 @@ export function CheckoutPage() {
     );
   }
 
-  // ── Hauptformular ─────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-2xl space-y-8 py-8">
       <h1 className="text-2xl font-bold">Zur Kasse</h1>
 
-      {/* ── Abschnitt 1: Bestellübersicht ── */}
       <section className="space-y-4 rounded-lg border p-6">
         <h2 className="text-lg font-semibold">Ihre Bestellung</h2>
 
@@ -407,7 +488,7 @@ export function CheckoutPage() {
           const last = dates[dates.length - 1];
 
           return (
-            <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-1">
+            <div className="space-y-1 rounded-md bg-muted/50 px-4 py-3 text-sm">
               <p>
                 <span className="font-medium">Lieferant:</span>{" "}
                 {supplierName ?? "–"}
@@ -438,7 +519,6 @@ export function CheckoutPage() {
                 <span>
                   {item.quantity}× {item.name}
                 </span>
-                {/* NEU */}
                 {item.deliveryDate && (
                   <p className="text-xs text-muted-foreground">
                     Liefertag: {formatDate(item.deliveryDate)}
@@ -460,12 +540,11 @@ export function CheckoutPage() {
         </div>
       </section>
 
-      {/* ── Abschnitt 2: Kundendaten ── */}
       <section className="space-y-4 rounded-lg border p-6">
         <h2 className="text-lg font-semibold">Ihre Daten</h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2 space-y-1">
+          <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="full_name">Vollständiger Name *</Label>
             <Input
               id="full_name"
@@ -525,6 +604,7 @@ export function CheckoutPage() {
             <Label htmlFor="postal_code">PLZ *</Label>
             <Input
               id="postal_code"
+              inputMode="numeric"
               value={customer.postal_code}
               onChange={(e) =>
                 handleCustomerChange("postal_code", e.target.value)
@@ -543,7 +623,7 @@ export function CheckoutPage() {
             />
           </div>
 
-          <div className="sm:col-span-2 space-y-1">
+          <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="notes">Anmerkungen zur Lieferung</Label>
             <Input
               id="notes"
@@ -554,7 +634,6 @@ export function CheckoutPage() {
           </div>
         </div>
 
-        {/* Rechnungsadresse */}
         <div className="flex items-center gap-2 pt-2">
           <Checkbox
             id="sameAsDelivery"
@@ -572,10 +651,11 @@ export function CheckoutPage() {
         </div>
 
         {!sameAsDelivery && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
-            <h3 className="sm:col-span-2 font-medium text-sm">
+          <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
+            <h3 className="text-sm font-medium sm:col-span-2">
               Rechnungsadresse
             </h3>
+
             <div className="space-y-1">
               <Label htmlFor="b_street">Straße *</Label>
               <Input
@@ -584,6 +664,7 @@ export function CheckoutPage() {
                 onChange={(e) => handleBillingChange("street", e.target.value)}
               />
             </div>
+
             <div className="space-y-1">
               <Label htmlFor="b_house_number">Hausnummer *</Label>
               <Input
@@ -594,16 +675,19 @@ export function CheckoutPage() {
                 }
               />
             </div>
+
             <div className="space-y-1">
               <Label htmlFor="b_postal_code">PLZ *</Label>
               <Input
                 id="b_postal_code"
+                inputMode="numeric"
                 value={billingAddress.postal_code}
                 onChange={(e) =>
                   handleBillingChange("postal_code", e.target.value)
                 }
               />
             </div>
+
             <div className="space-y-1">
               <Label htmlFor="b_city">Stadt *</Label>
               <Input
@@ -616,7 +700,6 @@ export function CheckoutPage() {
         )}
       </section>
 
-      {/* ── Abschnitt 3: Widerrufsbelehrung + verbindliche Bestellung ── */}
       <section className="space-y-4 rounded-lg border p-6">
         <h2 className="text-lg font-semibold">Widerrufsbelehrung</h2>
 
@@ -653,7 +736,33 @@ export function CheckoutPage() {
           </Label>
         </div>
 
+        <div className="flex items-start gap-3 pt-1">
+          <input
+            type="checkbox"
+            id="phoneAccepted"
+            checked={phoneAccepted}
+            onChange={(e) => setPhoneAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border"
+          />
+          <Label
+            htmlFor="phoneAccepted"
+            className="cursor-pointer font-normal leading-5"
+          >
+            Ich bin einverstanden, dass Sie mich telefonisch kontaktieren dürfen.
+          </Label>
+        </div>
+
         <Separator />
+
+        {!areRequiredCheckboxesAccepted && (
+          <p
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            role="alert"
+          >
+            Bitte aktivieren Sie beide Checkboxen, um die Bestellung absenden zu
+            können.
+          </p>
+        )}
 
         <p className="text-sm text-muted-foreground">
           Mit Klick auf „Jetzt verbindlich bestellen" geben Sie eine
@@ -663,16 +772,18 @@ export function CheckoutPage() {
 
         <Button
           type="button"
-          className="w-full"
           size="lg"
-          disabled={!isFormValid() || isSubmitting}
+          className={`w-full transition-opacity ${
+            !areRequiredCheckboxesAccepted ? "opacity-50 hover:opacity-60" : ""
+          }`}
+          disabled={!areRequiredCheckboxesAccepted || isSubmitting}
+          aria-disabled={!areRequiredCheckboxesAccepted || isSubmitting}
           onClick={handleSubmit}
         >
           {isSubmitting ? "Wird gesendet…" : "Jetzt verbindlich bestellen"}
         </Button>
       </section>
 
-      {/* ── Widerrufsbelehrung Dialog ── */}
       <Dialog open={widerrufsDialogOpen} onOpenChange={setWiderrufsDialogOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>

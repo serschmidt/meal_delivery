@@ -12,9 +12,17 @@ set_exception_handler(function (Throwable $e) {
 });
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/jwt_config.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/mailer.php';
+
 require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../src/cors.php';
 require_once __DIR__ . '/../src/response.php';
+
+require_once __DIR__ . '/../src/services/AuthService.php';
+require_once __DIR__ . '/../src/middleware/AuthMiddleware.php';
+
 require_once __DIR__ . '/../src/suppliers.php';
 require_once __DIR__ . '/../src/meals.php';
 require_once __DIR__ . '/../src/weekly-menus.php';
@@ -35,6 +43,72 @@ if ($route === '') {
     $route = trim($route, '/');
 }
 
+if ($route === 'auth/login' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+
+    $email = trim($input['email'] ?? '');
+    $password = $input['password'] ?? '';
+
+    if ($email === '' || $password === '') {
+        jsonResponse(['error' => 'E-Mail und Passwort sind erforderlich.'], 422);
+        exit;
+    }
+
+    try {
+        $result = loginAdmin($email, $password);
+        jsonResponse(['data' => $result], 200);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 401);
+        exit;
+    }
+}
+
+if ($route === 'auth/me' && $method === 'GET') {
+    $user = requireAuth();
+    jsonResponse(['data' => $user], 200);
+    exit;
+}
+
+// ------------------------------------------------------------------------------
+// GET /suppliers/by-delivery-area?q=...
+// ------------------------------------------------------------------------------
+
+if ($method === 'GET' && $route === 'suppliers/by-delivery-area') {
+    $q = trim($_GET['q'] ?? '');
+
+    try {
+        jsonResponse(['data' => findSupplierByDeliveryArea($q)]);
+        exit;
+    } catch (InvalidArgumentException $e) {
+        jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// GET /suppliers/{id}/delivery-areas?q=...
+// ------------------------------------------------------------------------------
+
+if ($method === 'GET' && preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas$#', $route, $matches)) {
+    $supplierId = $matches[1];
+    $q = trim($_GET['q'] ?? '');
+
+    try {
+        jsonResponse(['data' => getSupplierDeliveryAreas($supplierId, $q)]);
+        exit;
+    } catch (InvalidArgumentException $e) {
+        jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
 // ------------------------------------------------------------------------------
 // GET /suppliers/all
 // ------------------------------------------------------------------------------
@@ -42,8 +116,10 @@ if ($route === '') {
 if ($method === 'GET' && $route === 'suppliers/all') {
     try {
         jsonResponse(['data' => getAllSuppliers()]);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -54,6 +130,7 @@ if ($method === 'GET' && $route === 'suppliers/all') {
 if ($method === 'GET' && $route === 'suppliers/search') {
     $q = $_GET['q'] ?? '';
     jsonResponse(['data' => searchSuppliers($q)]);
+    exit;
 }
 
 // ------------------------------------------------------------------------------
@@ -68,11 +145,14 @@ if ($method === 'GET' && preg_match('#^suppliers/([0-9a-f\-]+)$#', $route, $matc
 
         if ($supplier === null) {
             jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
         }
 
         jsonResponse(['data' => $supplier]);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -86,13 +166,17 @@ if ($method === 'POST' && $route === 'suppliers') {
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         jsonResponse(['data' => createSupplier($data)], 201);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -108,19 +192,24 @@ if ($method === 'PUT' && preg_match('#^suppliers/([0-9a-f\-]+)$#', $route, $matc
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         $supplier = updateSupplier($id, $data);
 
         if ($supplier === null) {
             jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
         }
 
         jsonResponse(['data' => $supplier]);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -130,6 +219,7 @@ if ($method === 'PUT' && preg_match('#^suppliers/([0-9a-f\-]+)$#', $route, $matc
 
 if ($method === 'GET' && $route === 'meals') {
     jsonResponse(['data' => getAllMeals()]);
+    exit;
 }
 
 // ------------------------------------------------------------------------------
@@ -137,18 +227,23 @@ if ($method === 'GET' && $route === 'meals') {
 // ------------------------------------------------------------------------------
 
 if ($method === 'POST' && $route === 'meals') {
+    $user = requireAuth();
     try {
         $data = json_decode(file_get_contents('php://input'), true);
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         jsonResponse(['data' => createMeal($data)], 201);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -157,6 +252,7 @@ if ($method === 'POST' && $route === 'meals') {
 // ------------------------------------------------------------------------------
 
 if ($method === 'PUT' && preg_match('#^meals/([0-9a-f\-]+)$#', $route, $matches)) {
+    $user = requireAuth();
     $id = $matches[1];
 
     try {
@@ -164,19 +260,24 @@ if ($method === 'PUT' && preg_match('#^meals/([0-9a-f\-]+)$#', $route, $matches)
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         $meal = updateMeal($id, $data);
 
         if ($meal === null) {
             jsonResponse(['error' => 'Meal not found'], 404);
+            exit;
         }
 
         jsonResponse(['data' => $meal]);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -185,6 +286,7 @@ if ($method === 'PUT' && preg_match('#^meals/([0-9a-f\-]+)$#', $route, $matches)
 // ------------------------------------------------------------------------------
 
 if ($method === 'DELETE' && preg_match('#^meals/([0-9a-f\-]+)$#', $route, $matches)) {
+    $user = requireAuth();
     $id = $matches[1];
 
     try {
@@ -192,11 +294,14 @@ if ($method === 'DELETE' && preg_match('#^meals/([0-9a-f\-]+)$#', $route, $match
 
         if (!$deleted) {
             jsonResponse(['error' => 'Meal not found'], 404);
+            exit;
         }
 
         jsonResponse([], 204);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -228,11 +333,14 @@ if ($method === 'GET' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route, $m
 
         if ($weeklyMenu === null) {
             jsonResponse(['error' => 'Weekly menu not found'], 404);
+            exit;
         }
 
         jsonResponse(['data' => $weeklyMenu]);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+            exit;
     }
 }
 
@@ -246,13 +354,17 @@ if ($method === 'POST' && $route === 'weekly-menus') {
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         jsonResponse(['data' => createWeeklyMenu($data)], 201);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -261,26 +373,32 @@ if ($method === 'POST' && $route === 'weekly-menus') {
 // ------------------------------------------------------------------------------
 
 if ($method === 'PUT' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route, $matches)) {
-    $id = $matches[1];
+    $user = requireAuth();
+$id = $matches[1];
 
     try {
         $data = json_decode(file_get_contents('php://input'), true);
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
-        }
+            exit;
+            }
 
         $weeklyMenu = updateWeeklyMenu($id, $data);
 
         if ($weeklyMenu === null) {
             jsonResponse(['error' => 'Weekly menu not found'], 404);
+            exit;
         }
 
         jsonResponse(['data' => $weeklyMenu]);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -289,6 +407,7 @@ if ($method === 'PUT' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route, $m
 // ------------------------------------------------------------------------------
 
 if ($method === 'DELETE' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route, $matches)) {
+    $user = requireAuth();
     $id = $matches[1];
 
     try {
@@ -296,11 +415,15 @@ if ($method === 'DELETE' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route,
 
         if (!$deleted) {
             jsonResponse(['error' => 'Weekly menu not found'], 404);
+            exit;
         }
 
         jsonResponse([], 204);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+
     }
 }
 
@@ -310,6 +433,7 @@ if ($method === 'DELETE' && preg_match('#^weekly-menus/([0-9a-f\-]+)$#', $route,
 
 if ($method === 'GET' && $route === 'orders') {
     jsonResponse(['data' => getAllOrders()]);
+    exit;
 }
 
 // ------------------------------------------------------------------------------
@@ -324,11 +448,15 @@ if ($method === 'GET' && preg_match('#^orders/([0-9a-f\-]+)$#', $route, $matches
 
         if ($order === null) {
             jsonResponse(['error' => 'Order not found'], 404);
+        exit;
+
         }
 
         jsonResponse(['data' => $order]);
+        exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 
@@ -342,11 +470,47 @@ if ($method === 'POST' && $route === 'orders') {
 
         if (!is_array($data)) {
             jsonResponse(['error' => 'Invalid JSON', 'json_error' => json_last_error_msg()], 400);
+            exit;
         }
 
         jsonResponse(['data' => createOrder($data)], 201);
+        exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// GET /customers
+// ------------------------------------------------------------------------------
+
+if ($method === 'GET' && $route === 'customers') {
+    try {
+        jsonResponse(['data' => getAllCustomers()]);
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+    }
+}
+
+// ------------------------------------------------------------------------------
+// GET /customers/{id}
+// ------------------------------------------------------------------------------
+
+if ($method === 'GET' && preg_match('#^customers/([0-9a-f\\-]+)$#', $route, $matches)) {
+    $id = $matches[1];
+
+    try {
+        $customer = getCustomerById($id);
+
+        if ($customer === null) {
+            jsonResponse(['error' => 'Customer not found'], 404);
+        }
+
+        jsonResponse(['data' => $customer]);
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
     }
@@ -357,3 +521,4 @@ if ($method === 'POST' && $route === 'orders') {
 // ------------------------------------------------------------------------------
 
 jsonResponse(['error' => 'Route not found'], 404);
+exit;

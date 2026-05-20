@@ -1,94 +1,262 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import {
   Store,
   CalendarDays,
   UserPlus,
-  ImagePlus,
-  ShieldCheck,
+  // ImagePlus,
+  FileText,
+  X,
 } from "lucide-react";
-import { useSupplier } from "../contexts/useSupplier";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
 
-export function Sidebar() {
+type FooterDialogKey =
+  | "agb"
+  | "datenschutz"
+  | "impressum"
+  | "versand-zahlung"
+  | "widerrufsrecht"
+  | null;
+
+type SidebarProps = {
+  onFooterDialogChange: (dialog: Exclude<FooterDialogKey, null>) => void;
+  isOpen: boolean;
+  onClose: () => void;
+};
+
+export function Sidebar({
+  onFooterDialogChange,
+  isOpen,
+  onClose,
+}: SidebarProps) {
   const location = useLocation();
-  const { selectedSupplier } = useSupplier();
+  const [impressumOpen, setImpressumOpen] = useState(false);
 
   const isHome = location.pathname === "/";
   const isRegister = location.pathname === "/lieferant-werden";
-  const isAdmin = location.pathname.startsWith("/admin");
+
+  const openLegalDialog = (key: Exclude<FooterDialogKey, null>) => {
+    setImpressumOpen(false);
+
+    window.setTimeout(() => {
+      onFooterDialogChange(key);
+    }, 150);
+  };
+
+  const handleNavigate = () => {
+    onClose();
+  };
 
   return (
-    <aside className="fixed left-0 top-0 flex h-screen w-48 shrink-0 flex-col border-r bg-background p-3">
-      <div className="mt-16 mb-4 space-y-3 px-1">
-        {selectedSupplier && (
-          <div className="rounded-lg border bg-primary/10 px-2 py-2">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Ausgewählt
-            </p>
-            <p className="truncate text-sm font-medium">
-              {selectedSupplier.fullName}
-            </p>
-          </div>
-        )}
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 lg:hidden ${
+          isOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
-        <p className="text-xs leading-5 text-muted-foreground">
-          Schnellzugriff auf alle Bereiche
-        </p>
-      </div>
-
-      <nav className="flex-1 space-y-3">
-        <a href="/#lieferanten" className="block">
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-screen w-48 shrink-0 flex-col border-r bg-background p-3 transition-transform duration-300 lg:z-30 ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        <div className="mb-2 flex items-center justify-between lg:hidden">
+          <span className="text-sm font-semibold">Menü</span>
           <Button
-            variant={isHome ? "secondary" : "ghost"}
-            className="h-14 w-full justify-start px-3 text-sm"
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Menü schließen"
           >
-            <Store className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">Lieferanten wählen</span>
+            <X className="h-5 w-5" />
           </Button>
-        </a>
+        </div>
 
-        <a href="/#wochenmenue" className="block">
-          <Button
-            variant={isHome ? "secondary" : "ghost"}
-            className="h-14 w-full justify-start px-3 text-sm"
-          >
-            <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">Wochenmenüs ansehen</span>
-          </Button>
-        </a>
+        <div className="mb-4 mt-2 lg:mt-16 space-y-3 px-1">
+          <p className="text-xs leading-5 text-muted-foreground">
+            Schnellzugriff auf alle Bereiche
+          </p>
+        </div>
 
-        <Link to="/lieferant-werden" className="block">
-          <Button
-            variant={isRegister ? "secondary" : "ghost"}
-            className="h-14 w-full justify-start px-3 text-sm"
-          >
-            <UserPlus className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate">Lieferant werden</span>
-          </Button>
-        </Link>
-
-        <Button
-          variant="ghost"
-          className="h-14 w-full justify-start px-3 text-sm"
-          disabled
-        >
-          <ImagePlus className="mr-2 h-4 w-4 shrink-0" />
-          <span className="truncate">Partner Banner</span>
-        </Button>
-
-        {/* Trennlinie vor Admin */}
-        <div className="border-t pt-3">
-          <Link to="/admin" className="block">
+        <nav className="flex-1 space-y-3 overflow-y-auto">
+          <a href="/#lieferanten" className="block" onClick={handleNavigate}>
             <Button
-              variant={isAdmin ? "secondary" : "ghost"}
+              variant={isHome ? "secondary" : "ghost"}
               className="h-14 w-full justify-start px-3 text-sm"
             >
-              <ShieldCheck className="mr-2 h-4 w-4 shrink-0" />
-              <span className="truncate">Admin</span>
+              <Store className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Liefergebiet </span>
+            </Button>
+          </a>
+
+          <a href="/#wochenmenue" className="block" onClick={handleNavigate}>
+            <Button
+              variant={isHome ? "secondary" : "ghost"}
+              className="h-14 w-full justify-start px-3 text-sm"
+            >
+              <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Wochenmenüs</span>
+            </Button>
+          </a>
+
+          <Link to="/lieferant-werden" className="block" onClick={handleNavigate}>
+            <Button
+              variant={isRegister ? "secondary" : "ghost"}
+              className="h-14 w-full justify-start px-3 text-sm"
+            >
+              <UserPlus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Partner werden</span>
             </Button>
           </Link>
-        </div>
-      </nav>
-    </aside>
+
+          {/* <Button
+            variant="ghost"
+            className="h-14 w-full justify-start px-3 text-sm"
+            disabled
+          >
+            <ImagePlus className="mr-2 h-4 w-4 shrink-0" />
+            <span className="truncate">Partner Banner</span>
+          </Button> */}
+
+          <Dialog open={impressumOpen} onOpenChange={setImpressumOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                className="h-14 w-full justify-start px-3 text-sm"
+              >
+                <FileText className="mr-2 h-4 w-4 shrink-0" />
+                <span className="truncate">Impressum</span>
+              </Button>
+            </DialogTrigger>
+
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Impressum</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-6 text-sm leading-6">
+                <section className="space-y-2">
+                  <h3 className="font-semibold">Impressum</h3>
+
+                  <p>Angaben gemäß § 5 DDG</p>
+                  <p>Urban Fleet Logistics UG (haftungsbeschränkt)</p>
+                  <p>Rheydter Straße 41</p>
+                  <p>41464 Neuss</p>
+                  <p>Deutschland</p>
+
+                  <p>Vertreten durch:</p>
+                  <p>Amjad Hassan, Geschäftsführer</p>
+
+                  <p>Handelsregister:</p>
+                  <p>Amtsgericht Neuss, HRB 25321</p>
+
+                  <p>Umsatzsteuer-Identifikationsnummer:</p>
+                  <p>DE462024982</p>
+
+                  <p>Kontakt:</p>
+                  <p>Telefon: +49 176 26087299</p>
+                  <p>
+                    E-Mail:{" "}
+                    <a
+                      href="mailto:info@urban-fleet.de"
+                      className="underline underline-offset-4"
+                    >
+                      info@urban-fleet.de
+                    </a>
+                  </p>
+                </section>
+
+                <section className="space-y-3 border-t pt-6">
+                  <h3 className="font-semibold">Weitere Informationen</h3>
+
+                  <div className="flex flex-col items-start gap-2">
+                    <Button
+                      variant="ghost"
+                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => openLegalDialog("agb")}
+                    >
+                      AGB
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => openLegalDialog("datenschutz")}
+                    >
+                      Datenschutz
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => openLegalDialog("versand-zahlung")}
+                    >
+                      Versand und Zahlung
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="h-auto p-0 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => openLegalDialog("widerrufsrecht")}
+                    >
+                      Widerrufsrecht
+                    </Button>
+                  </div>
+                </section>
+
+                <section className="pt-10">
+                  <p className="text-sm text-muted-foreground">
+                    Bilder:{" "}
+                    <span className="font-medium text-foreground">Pixabay</span>
+                  </p>
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="font-semibold">
+                    Verbraucherstreitbeilegung / Universalschlichtungsstelle
+                  </h3>
+                  <p>
+                    Wir sind nicht bereit oder verpflichtet, an
+                    Streitbeilegungsverfahren vor einer
+                    Verbraucherschlichtungsstelle teilzunehmen.
+                  </p>
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="font-semibold">Haftung für Inhalte</h3>
+                  <p>
+                    Als Diensteanbieter sind wir gemäß § 7 Abs.1 TMG für eigene
+                    Inhalte auf diesen Seiten nach den allgemeinen Gesetzen
+                    verantwortlich. Nach §§ 8 bis 10 TMG sind wir als
+                    Diensteanbieter jedoch nicht verpflichtet, übermittelte oder
+                    gespeicherte fremde Informationen zu überwachen oder nach
+                    Umständen zu forschen, die auf eine rechtswidrige Tätigkeit
+                    hinweisen.
+                  </p>
+                  <p>
+                    Verpflichtungen zur Entfernung oder Sperrung der Nutzung von
+                    Informationen nach den allgemeinen Gesetzen bleiben hiervon
+                    unberührt. Eine diesbezügliche Haftung ist jedoch erst ab dem
+                    Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung
+                    möglich. Bei Bekanntwerden von entsprechenden
+                    Rechtsverletzungen werden wir diese Inhalte umgehend
+                    entfernen.
+                  </p>
+                </section>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </nav>
+      </aside>
+    </>
   );
 }

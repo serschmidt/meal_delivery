@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { apiPost } from "../lib/api";
-import supplierImage from "../assets/delivery-7491357_1920.png";
+import supplierImage from "../assets/liefer.png";
 
 type SupplierRegistrationFormData = {
   supplierName: string;

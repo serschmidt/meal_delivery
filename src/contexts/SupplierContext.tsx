@@ -1,4 +1,10 @@
-import { createContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type SupplierAddress = {
   street: string;
@@ -32,7 +38,7 @@ type SupplierContextType = {
 };
 
 export const SupplierContext = createContext<SupplierContextType | undefined>(
-  undefined
+  undefined,
 );
 
 type SupplierProviderProps = {
@@ -42,13 +48,21 @@ type SupplierProviderProps = {
 export function SupplierProvider({ children }: SupplierProviderProps) {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
+  const selectSupplier = useCallback((supplier: Supplier | null) => {
+    setSelectedSupplier(supplier);
+  }, []);
+
+  const clearSupplier = useCallback(() => {
+    setSelectedSupplier(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       selectedSupplier,
-      selectSupplier: setSelectedSupplier,
-      clearSupplier: () => setSelectedSupplier(null),
+      selectSupplier,
+      clearSupplier,
     }),
-    [selectedSupplier]
+    [selectedSupplier, selectSupplier, clearSupplier],
   );
 
   return (

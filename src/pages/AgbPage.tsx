@@ -1,4 +1,8 @@
+import { useSupplier } from "../contexts/useSupplier";
+
 export function AgbPage() {
+    const { selectedSupplier } = useSupplier();
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 py-12 px-4">
       <div className="space-y-4">
@@ -26,16 +30,18 @@ export function AgbPage() {
           <br />
           <strong>Marie kocht</strong>
           <br />
-          Höninger Weg 278
+          {selectedSupplier?.fullName}
           <br />
-          50969 Köln
+          {selectedSupplier?.address?.street} {selectedSupplier?.address?.houseNumber}
+          <br />
+          {selectedSupplier?.address?.postalCode} {selectedSupplier?.address?.city}
         </p>
         <p>
           Sie erreichen unseren Kundendienst für Fragen, Reklamationen und
           Beanstandungen werktags von 9:00h bis 18:00h unter der Telefonnummer
-          <strong>+49 1578 661 5684</strong> sowie per E-Mail unter{" "}
-          <a href="mailto:abdulgani522@gmail.com" className="underline">
-            abdulgani522@gmail.com
+          <strong>{selectedSupplier?.phone}</strong> sowie per E-Mail unter{" "}
+          <a href={`mailto:${selectedSupplier?.email}`} className="underline">
+            {selectedSupplier?.email}
           </a>
           .
         </p>

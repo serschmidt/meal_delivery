@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CarouselApi } from "./ui/carousel";
 import {
   Carousel,
   CarouselContent,
@@ -66,6 +67,8 @@ function mapSupplier(apiSupplier: SupplierApi): Supplier {
 
 export function DeliveryPartners() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [api, setApi] = useState<CarouselApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +91,10 @@ export function DeliveryPartners() {
           : [];
 
         setSuppliers(mappedSuppliers);
+
+        if (mappedSuppliers.length > 0) {
+          setSelectedSupplier(mappedSuppliers[0]);
+        }
       } catch (err) {
         setError("Lieferanten konnten nicht geladen werden.");
       } finally {
@@ -97,6 +104,25 @@ export function DeliveryPartners() {
 
     fetchSuppliers();
   }, []);
+
+  useEffect(() => {
+    if (!api || suppliers.length === 0) return;
+
+    api.scrollTo(0);
+    setSelectedSupplier(suppliers[0]);
+
+    const onSelect = () => {
+      const index = api.selectedScrollSnap();
+      setSelectedSupplier(suppliers[index] ?? null);
+    };
+
+    api.on("select", onSelect);
+    onSelect();
+
+    return () => {
+      api.off("select", onSelect);
+    };
+  }, [api, suppliers]);
 
   if (loading) {
     return <p className="py-8 text-center">Lade Lieferanten...</p>;
@@ -116,10 +142,18 @@ export function DeliveryPartners() {
         Lieferanten in deiner Nähe:
       </h2>
 
+      {selectedSupplier && (
+        <p className="mb-4 text-center text-sm text-muted-foreground">
+          Ausgewählt: {selectedSupplier.fullName}
+        </p>
+      )}
+
       <Carousel
+        setApi={setApi}
         opts={{
           align: "start",
           slidesToScroll: 1,
+          startIndex: 0,
         }}
         orientation="vertical"
         className="w-full"
@@ -136,9 +170,6 @@ export function DeliveryPartners() {
                 <CardContent className="pt-2">
                   <p className="text-sm text-muted-foreground">
                     {supplier.postalCode} {supplier.city}
-                  </p>
-                  <p className="line-clamp-1 text-sm text-muted-foreground">
-                    {supplier.street} {supplier.houseNumber}
                   </p>
                 </CardContent>
               </Card>

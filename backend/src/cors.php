@@ -1,11 +1,13 @@
 <?php
-//src/cors.php
+// src/cors.php
 
 function handleCors(): void
 {
     $allowedOrigins = [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'https://www.liefermonopol.de',
+        'https://liefermonopol.de',
     ];
 
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -15,7 +17,7 @@ function handleCors(): void
         header('Vary: Origin');
     }
 
-    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

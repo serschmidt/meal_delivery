@@ -14,5 +14,5 @@ DirectoryIndex index.html index.php
     RewriteRule ^ - [L]
 
     # React SPA-Fallback
-    RewriteRule ^ dist/index.html [L]
+    RewriteRule ^ index.html [L]
 </IfModule>

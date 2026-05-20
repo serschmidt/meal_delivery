@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://liefermonopol.de/backend/public";
+  import.meta.env.VITE_API_URL || "/backend/public/index.php";
 
 type ApiResponse<T> = {
   data: T;
@@ -10,8 +10,7 @@ type ApiResponse<T> = {
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
 
 function buildUrl(route: string, queryParams?: QueryParams) {
-  const baseUrl = API_BASE_URL.endsWith("/") ? API_BASE_URL : `${API_BASE_URL}/`;
-  const url = new URL(baseUrl);
+  const url = new URL(API_BASE_URL, window.location.origin);
 
   url.searchParams.set("route", route);
 

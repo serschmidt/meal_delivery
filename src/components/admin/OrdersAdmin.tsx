@@ -10,11 +10,47 @@ import {
 import { apiGet } from "../../lib/api";
 import { toast } from "sonner";
 
+type ApiOrderCustomer = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+};
+
+type ApiOrderItem = {
+  id: string;
+  line_total: number;
+  price: number;
+  quantity: number;
+  unit_price: number;
+  order_id: string;
+  weekly_menu_entry_id: string;
+  meal_name?: string;
+  meal_description?: string;
+  menu_date?: string;
+  day_of_week?: string;
+};
+
+type ApiOrder = {
+  id: string;
+  created_at: string;
+  status: string;
+  total_price: number;
+  billing_address_id: string;
+  customer_id: string;
+  delivery_address_id: string;
+  supplier_id: string;
+  weekly_menu_id: string;
+  customer?: ApiOrderCustomer;
+  items?: ApiOrderItem[];
+};
+
 type OrderItem = {
-  mealId: string;
+  id: string;
   name: string;
   price: number;
   quantity: number;
+  menuDate?: string;
 };
 
 type Order = {
@@ -27,6 +63,39 @@ type Order = {
   items: OrderItem[];
 };
 
+function formatDate(value: string) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function mapApiOrderToOrder(apiOrder: ApiOrder): Order {
+  return {
+    id: apiOrder.id,
+    customerName: apiOrder.customer?.full_name || "—",
+    customerEmail: apiOrder.customer?.email || "—",
+    totalPrice: Number(apiOrder.total_price ?? 0),
+    status: apiOrder.status,
+    createdAt: apiOrder.created_at,
+    items: Array.isArray(apiOrder.items)
+      ? apiOrder.items.map((item) => ({
+          id: item.id,
+          name: item.meal_name || "—",
+          price: Number(item.unit_price ?? item.price ?? 0),
+          quantity: Number(item.quantity ?? 0),
+          menuDate: item.menu_date,
+        }))
+      : [],
+  };
+}
+
 export function OrdersAdmin() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,9 +105,11 @@ export function OrdersAdmin() {
   const loadOrders = async () => {
     try {
       setIsLoading(true);
-      const data = await apiGet<Order[]>("orders");
-      setOrders(Array.isArray(data) ? data : []);
-    } catch {
+      const data = await apiGet<ApiOrder[]>("orders");
+      const mapped = Array.isArray(data) ? data.map(mapApiOrderToOrder) : [];
+      setOrders(mapped);
+    } catch (error) {
+      console.error("Orders load error:", error);
       toast.error("Fehler beim Laden der Bestellungen.");
     } finally {
       setIsLoading(false);
@@ -64,15 +135,15 @@ export function OrdersAdmin() {
       )}
 
       {!isLoading && orders.length > 0 && (
-        <div className="rounded-xl border">
+        <div className="overflow-x-auto rounded-xl border">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3">Kunde</th>
+                <th className="px-4 py-3">Bestellt am</th>
                 <th className="px-4 py-3">E-Mail</th>
                 <th className="px-4 py-3">Betrag</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Datum</th>
                 <th className="px-4 py-3 text-right">Aktion</th>
               </tr>
             </thead>
@@ -84,18 +155,18 @@ export function OrdersAdmin() {
                 >
                   <td className="px-4 py-3 font-medium">{order.customerName}</td>
                   <td className="px-4 py-3 text-muted-foreground">
+                    {formatDate(order.createdAt)}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
                     {order.customerEmail}
                   </td>
                   <td className="px-4 py-3">
-                    € {order.totalPrice?.toFixed(2).replace(".", ",")}
+                    € {order.totalPrice.toFixed(2).replace(".", ",")}
                   </td>
                   <td className="px-4 py-3">
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
                       {order.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {order.createdAt?.slice(0, 10)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button
@@ -116,12 +187,12 @@ export function OrdersAdmin() {
         </div>
       )}
 
-      {/* Dialog: Bestelldetails */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Bestelldetails</DialogTitle>
           </DialogHeader>
+
           {selectedOrder && (
             <div className="space-y-4 text-sm">
               <div className="space-y-1">
@@ -130,7 +201,7 @@ export function OrdersAdmin() {
                   {selectedOrder.customerEmail}
                 </p>
                 <p className="text-muted-foreground">
-                  Bestellt am: {selectedOrder.createdAt?.slice(0, 10)}
+                  Bestellt am: {formatDate(selectedOrder.createdAt)}
                 </p>
               </div>
 
@@ -144,13 +215,23 @@ export function OrdersAdmin() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.items?.map((item, i) => (
-                      <tr key={i} className="border-b last:border-0">
-                        <td className="px-3 py-2">{item.name}</td>
-                        <td className="px-3 py-2 text-right">{item.quantity}×</td>
+                    {selectedOrder.items.map((item) => (
+                      <tr key={item.id} className="border-b last:border-0">
+                        <td className="px-3 py-2">
+                          <div className="space-y-1">
+                            <p>{item.name}</p>
+                            {item.menuDate && (
+                              <p className="text-xs text-muted-foreground">
+                                Liefertag: {formatDate(item.menuDate)}
+                              </p>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-right">
-                          €{" "}
-                          {(item.price * item.quantity)
+                          {item.quantity}×
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          € {(item.price * item.quantity)
                             .toFixed(2)
                             .replace(".", ",")}
                         </td>
@@ -163,7 +244,7 @@ export function OrdersAdmin() {
               <div className="flex justify-between font-medium">
                 <span>Gesamt</span>
                 <span>
-                  € {selectedOrder.totalPrice?.toFixed(2).replace(".", ",")}
+                  € {selectedOrder.totalPrice.toFixed(2).replace(".", ",")}
                 </span>
               </div>
             </div>

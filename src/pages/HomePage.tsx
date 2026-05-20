@@ -4,7 +4,7 @@ import { Menu } from "../components/Menu";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { useSupplier } from "../contexts/useSupplier";
-import heroImage from "../assets/ai-generated-8520995_1280.png";
+import heroImage from "../assets/marie-kocht.png";
 
 type HomePageProps = {
   searchValue: string;
@@ -61,10 +61,9 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
       <section className="grid w-full gap-4 xl:grid-cols-5">
         <Card className="rounded-2xl">
           <CardContent className="space-y-2 p-6">
-            <h2 className="text-xl font-semibold">1. Lieferant wählen</h2>
+            <h2 className="text-xl font-semibold">1. Liefergebiet wählen</h2>
             <p className="text-sm text-muted-foreground">
-              Suche einen vorhandenen Lieferanten in deiner Nähe und wähle ihn
-              für deine Bestellung aus.
+              Schauen Sie, ob die Marie in ihrer Stadt kocht.
             </p>
           </CardContent>
         </Card>
@@ -84,7 +83,7 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
         <Card className="rounded-2xl">
           <CardContent className="space-y-2 p-6">
             <h2 className="text-xl font-semibold">
-              3. Eine Wochen im Voraus bestellen
+              3. Eine Woche im Voraus bestellen
             </h2>
             <p className="text-sm text-muted-foreground">
               Gib deine Lieferdaten ein und schließe deine Bestellung ohne Login
@@ -96,7 +95,7 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
         <Card className="rounded-2xl">
           <CardContent className="space-y-2 p-6">
             <h2 className="text-xl font-semibold">
-              4. In den Warenkorb legen und Bezahlen
+              4. In den Warenkorb legen und bezahlen
             </h2>
             <p className="text-sm text-muted-foreground">
               Gib deine Lieferdaten ein und schließe deine Bestellung ohne Login
@@ -104,6 +103,7 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
             </p>
           </CardContent>
         </Card>
+
         <Card className="rounded-2xl">
           <CardContent className="space-y-2 p-6">
             <h2 className="text-xl font-semibold">5. Genießen</h2>
