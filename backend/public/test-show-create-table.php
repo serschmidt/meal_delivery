@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config/db.php';
 header('Content-Type: text/plain; charset=UTF-8');
 
 $tables = [
+    'admins',
     'customers',
     'orders',
     'order_items',
@@ -15,6 +16,8 @@ $tables = [
     'weekly_menus',
     'weekly_menu_entries',
     'meals',
+    'admin_refresh_tokens',
+    'supplier_refresh_tokens',
 ];
 
 try {
