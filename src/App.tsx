@@ -14,8 +14,13 @@ import { useCart } from "./contexts/useCart";
 
 import { HomePage } from "./pages/HomePage";
 import { SupplierRegistrationPage } from "./pages/SupplierRegistrationPage";
+import { SupplierLoginPage } from "./pages/SupplierLoginPage";
+import { SupplierAuthProvider } from "./contexts/SupplierAuthProvider";
+import { SupplierProtectedRoute } from "./components/SupplierProtectedRoute";
+import { SupplierPage } from "./pages/SupplierPage";
+
 import { AdminPage } from "./pages/AdminPage";
-import { Sidebar } from "./components/Sidebar";
+import { AdminAuthProvider } from "./contexts/AdminAuthProvider";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { Toaster } from "sonner";
 
@@ -53,7 +58,6 @@ type HeaderDialogKey =
   | null;
 
 function AppContent() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { selectedSupplier } = useSupplier();
   const { cartItemCount } = useCart();
 
@@ -311,40 +315,54 @@ function AppContent() {
           onOrdersClick={() => console.log("Bestellungen öffnen")}
           onProfileClick={() => console.log("Profil öffnen")}
           onHeaderDialogChange={setHeaderDialog}
-          onSidebarToggle={() => setIsSidebarOpen((prev) => !prev)}
         />
 
         <CartDrawer open={isCartOpen} onOpenChange={setIsCartOpen} />
 
-        <div className="flex flex-1">
-          <Sidebar
-            isOpen={isSidebarOpen}
-            onClose={() => setIsSidebarOpen(false)}
-            onFooterDialogChange={setFooterDialog}
-          />
-          <main className="flex-1 px-4 py-6 md:px-1 lg:ml-48">
-            {" "}
-            <div className="mx-auto">
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <HomePage
-                      searchValue={searchValue}
-                      onSearchChange={setSearchValue}
-                    />
-                  }
+        <main className="flex-1">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  searchValue={searchValue}
+                  onSearchChange={setSearchValue}
                 />
-                <Route
-                  path="/lieferant-werden"
-                  element={<SupplierRegistrationPage />}
-                />
-                <Route path="/admin" element={<AdminPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-              </Routes>
-            </div>
-          </main>
-        </div>
+              }
+            />
+            <Route
+              path="/partner-login"
+              element={
+                <SupplierAuthProvider>
+                  <SupplierLoginPage />
+                </SupplierAuthProvider>
+              }
+            />
+            <Route
+              path="/supplier"
+              element={
+                <SupplierAuthProvider>
+                  <SupplierProtectedRoute>
+                    <SupplierPage />
+                  </SupplierProtectedRoute>
+                </SupplierAuthProvider>
+              }
+            />
+            <Route
+              path="/lieferant-werden"
+              element={<SupplierRegistrationPage />}
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminAuthProvider>
+                  <AdminPage />
+                </AdminAuthProvider>
+              }
+            />
+            <Route path="/checkout" element={<CheckoutPage />} />
+          </Routes>
+        </main>
 
         <footer className="border-t bg-background/95 p-4 text-center text-sm text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -444,7 +462,7 @@ export default function App() {
           <AppContent />
         </CartProvider>
       </SupplierProvider>
-      <Toaster richColors position="top-right" />
+      <Toaster richColors position="bottom-right" />
     </>
   );
 }

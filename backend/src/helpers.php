@@ -23,3 +23,20 @@ function binToUuid(?string $binary): ?string
 
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($binary), 4));
 }
+
+function jsonInput(): array
+{
+    $raw = file_get_contents('php://input');
+
+    if ($raw === false || trim($raw) === '') {
+        return [];
+    }
+
+    $data = json_decode($raw, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+        throw new InvalidArgumentException('Ungültiger JSON-Request-Body.');
+    }
+
+    return $data;
+}

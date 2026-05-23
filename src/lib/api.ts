@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "/backend/public/index.php";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/backend/index.php";
 
 type ApiResponse<T> = {
   data: T;
@@ -8,6 +7,31 @@ type ApiResponse<T> = {
 };
 
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
+
+let accessToken: string | null = null;
+let refreshPromise: Promise<void> | null = null;
+let unauthorizedHandler: (() => void) | null = null;
+let refreshRoute = "auth/refresh";
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler;
+}
+
+export function setRefreshRoute(route: string) {
+  refreshRoute = route;
+}
+
+function notifyUnauthorized() {
+  unauthorizedHandler?.();
+}
 
 function buildUrl(route: string, queryParams?: QueryParams) {
   const url = new URL(API_BASE_URL, window.location.origin);
@@ -25,19 +49,73 @@ function buildUrl(route: string, queryParams?: QueryParams) {
   return url.toString();
 }
 
+async function tryRefreshToken() {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const response = await fetch(buildUrl(refreshRoute), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        setAccessToken(null);
+        notifyUnauthorized();
+        throw new Error("Sitzung abgelaufen.");
+      }
+
+      const payload = await response.json();
+      const newAccessToken = payload?.data?.token?.access_token;
+
+      if (!newAccessToken) {
+        setAccessToken(null);
+        notifyUnauthorized();
+        throw new Error("Kein neuer Access-Token erhalten.");
+      }
+
+      setAccessToken(newAccessToken);
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
 async function request<T>(
   route: string,
   options: RequestInit = {},
-  queryParams?: QueryParams
+  queryParams?: QueryParams,
+  retry = true,
 ): Promise<T> {
+  const headers: HeadersInit = {
+    Accept: "application/json",
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(options.headers ?? {}),
+  };
+
   const response = await fetch(buildUrl(route, queryParams), {
     ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers ?? {}),
-    },
+    credentials: "include",
+    headers,
   });
+
+  if (
+    response.status === 401 &&
+    retry &&
+    route !== "auth/login" &&
+    route !== "auth/refresh" &&
+    route !== "auth/logout" &&
+    route !== "supplier-auth/login" &&
+    route !== "supplier-auth/refresh" &&
+    route !== "supplier-auth/logout"
+  ) {
+    await tryRefreshToken();
+    return request<T>(route, options, queryParams, false);
+  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -53,6 +131,11 @@ async function request<T>(
       payload?.message ||
       `API-Fehler: ${response.status} ${response.statusText}`;
 
+    if (response.status === 401) {
+      setAccessToken(null);
+      notifyUnauthorized();
+    }
+
     throw new Error(message);
   }
 
@@ -66,7 +149,7 @@ async function request<T>(
 export async function apiGet<T>(
   route: string,
   queryParams?: QueryParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<T> {
   return request<T>(
     route,
@@ -74,14 +157,14 @@ export async function apiGet<T>(
       method: "GET",
       signal,
     },
-    queryParams
+    queryParams,
   );
 }
 
 export async function apiPost<TResponse, TBody = unknown>(
   route: string,
   body?: TBody,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<TResponse> {
   return request<TResponse>(route, {
     method: "POST",
@@ -93,7 +176,7 @@ export async function apiPost<TResponse, TBody = unknown>(
 export async function apiPut<TResponse, TBody = unknown>(
   route: string,
   body?: TBody,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<TResponse> {
   return request<TResponse>(route, {
     method: "PUT",
@@ -105,7 +188,7 @@ export async function apiPut<TResponse, TBody = unknown>(
 export async function apiPatch<TResponse, TBody = unknown>(
   route: string,
   body?: TBody,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<TResponse> {
   return request<TResponse>(route, {
     method: "PATCH",
@@ -117,7 +200,7 @@ export async function apiPatch<TResponse, TBody = unknown>(
 export async function apiDelete<TResponse = void>(
   route: string,
   queryParams?: QueryParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<TResponse> {
   return request<TResponse>(
     route,
@@ -125,6 +208,6 @@ export async function apiDelete<TResponse = void>(
       method: "DELETE",
       signal,
     },
-    queryParams
+    queryParams,
   );
 }

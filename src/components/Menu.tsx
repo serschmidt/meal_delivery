@@ -5,6 +5,7 @@ import { useCart } from "../contexts/useCart";
 import { useSupplier } from "../contexts/useSupplier";
 import { toast } from "sonner";
 import { apiGet } from "../lib/api";
+import marieLogo from "../assets/marie-logo.png";
 
 type ApiMeal = {
   id?: string;
@@ -143,7 +144,7 @@ function normalizeMeal(meal: ApiMeal | null | undefined): WeeklyMeal {
 
 function normalizeEntry(
   entry: ApiWeeklyMenuEntry,
-  index: number
+  index: number,
 ): WeeklyMenuEntry {
   return {
     id: entry.id ?? `entry-${index}-${crypto.randomUUID()}`,
@@ -153,6 +154,18 @@ function normalizeEntry(
     position: entry.position ?? null,
     meal: normalizeMeal(entry.meal),
   };
+}
+
+function MenuSeparatorLogo() {
+  return (
+    <div className="flex justify-center">
+      <img
+        src={marieLogo}
+        alt="Marie kocht Logo"
+        className="h-14 w-auto opacity-80 md:h-16"
+      />
+    </div>
+  );
 }
 
 function normalizeWeeklyMenu(menu: ApiWeeklyMenu, index: number): WeeklyMenu {
@@ -204,7 +217,9 @@ function MealCard({ entry, menu, onAddToCart }: MealCardProps) {
       </p>
 
       {deliveryDateLabel && (
-        <p className="mt-1 text-xs text-muted-foreground">{deliveryDateLabel}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {deliveryDateLabel}
+        </p>
       )}
 
       <h3 className="mt-2 line-clamp-2 font-semibold">{entry.meal.name}</h3>
@@ -238,8 +253,8 @@ function MealCard({ entry, menu, onAddToCart }: MealCardProps) {
         {!entry.meal.available
           ? "Nicht verfügbar"
           : !orderable
-          ? "Nicht mehr bestellbar"
-          : "In den Warenkorb"}
+            ? "Nicht mehr bestellbar"
+            : "In den Warenkorb"}
       </Button>
     </div>
   );
@@ -264,7 +279,7 @@ export function Menu() {
         const data = await apiGet<ApiWeeklyMenu[]>(
           "weekly-menus",
           undefined,
-          controller.signal
+          controller.signal,
         );
 
         const normalized = Array.isArray(data)
@@ -280,7 +295,7 @@ export function Menu() {
         setError(
           err instanceof Error
             ? err.message
-            : "Fehler beim Laden der Wochenmenüs."
+            : "Fehler beim Laden der Wochenmenüs.",
         );
       } finally {
         setIsLoading(false);
@@ -345,71 +360,74 @@ export function Menu() {
           const dateRange = formatDateRange(menu.startDate, menu.endDate);
 
           return (
-            <Card key={menu.id} className="overflow-hidden rounded-3xl">
-              <CardHeader className="space-y-2">
-                <CardTitle className="text-2xl">{menu.title}</CardTitle>
+            <div key={menu.id} className="space-y-4">
+              <MenuSeparatorLogo />
+              <Card key={menu.id} className="overflow-hidden rounded-3xl">
+                <CardHeader className="space-y-2">
+                  <CardTitle className="text-2xl">{menu.title}</CardTitle>
 
-                <p className="text-sm text-muted-foreground">
-                  {menu.description}
-                </p>
+                  <p className="text-sm text-muted-foreground">
+                    {menu.description}
+                  </p>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  {menu.calendarWeek && <span>KW {menu.calendarWeek}</span>}
-                  {dateRange && <span>{dateRange}</span>}
-                </div>
-              </CardHeader>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {menu.calendarWeek && <span>KW {menu.calendarWeek}</span>}
+                    {dateRange && <span>{dateRange}</span>}
+                  </div>
+                </CardHeader>
 
-              <CardContent className="space-y-5">
-                <div className="overflow-hidden rounded-2xl border bg-muted/30">
-                  {menu.imageUrl ? (
-                    <img
-                      src={menu.imageUrl}
-                      alt={menu.title}
-                      className="h-[220px] w-full object-cover md:h-[280px]"
-                    />
-                  ) : (
-                    <div className="flex h-[180px] items-center justify-center px-4 text-center text-sm text-muted-foreground md:h-[220px]">
-                      Kein Bild vorhanden
-                    </div>
-                  )}
-                </div>
+                <CardContent className="space-y-5">
+                  <div className="overflow-hidden rounded-2xl border bg-muted/30">
+                    {menu.imageUrl ? (
+                      <img
+                        src={menu.imageUrl}
+                        alt={menu.title}
+                        className="h-[220px] w-full object-cover md:h-[280px]"
+                      />
+                    ) : (
+                      <div className="flex h-[180px] items-center justify-center px-4 text-center text-sm text-muted-foreground md:h-[220px]">
+                        Kein Bild vorhanden
+                      </div>
+                    )}
+                  </div>
 
-                <div className="space-y-4">
-                  {menu.entries.length === 0 && (
-                    <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground">
-                      Für dieses Wochenmenü sind aktuell noch keine Gerichte
-                      eingetragen.
-                    </div>
-                  )}
+                  <div className="space-y-4">
+                    {menu.entries.length === 0 && (
+                      <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground">
+                        Für dieses Wochenmenü sind aktuell noch keine Gerichte
+                        eingetragen.
+                      </div>
+                    )}
 
-                  {firstRow.length > 0 && (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      {firstRow.map((entry) => (
-                        <MealCard
-                          key={entry.id}
-                          entry={entry}
-                          menu={menu}
-                          onAddToCart={handleAddToCart}
-                        />
-                      ))}
-                    </div>
-                  )}
+                    {firstRow.length > 0 && (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        {firstRow.map((entry) => (
+                          <MealCard
+                            key={entry.id}
+                            entry={entry}
+                            menu={menu}
+                            onAddToCart={handleAddToCart}
+                          />
+                        ))}
+                      </div>
+                    )}
 
-                  {secondRow.length > 0 && (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {secondRow.map((entry) => (
-                        <MealCard
-                          key={entry.id}
-                          entry={entry}
-                          menu={menu}
-                          onAddToCart={handleAddToCart}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    {secondRow.length > 0 && (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {secondRow.map((entry) => (
+                          <MealCard
+                            key={entry.id}
+                            entry={entry}
+                            menu={menu}
+                            onAddToCart={handleAddToCart}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
     </div>

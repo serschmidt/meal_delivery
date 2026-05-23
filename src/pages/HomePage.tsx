@@ -14,23 +14,32 @@ type HomePageProps = {
 export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
   const { selectedSupplier } = useSupplier();
   const supplierName = selectedSupplier?.fullName ?? "Marie Kocht";
+  const scrollToElement = (id: string) => {
+    const element = document.getElementById(id);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement
+    ) {
+      element.focus();
+    }
+  };
 
   return (
-    <div className="w-full space-y-10 py-6">
-      <section className="w-full rounded-3xl bg-muted/40 px-6 py-12">
-        <div className="flex w-full justify-center">
-          <div className="flex w-full flex-col items-center space-y-5 text-center">
+    <div className="w-full space-y-10 pb-10">
+      <section className="w-full">
+        <img
+          src={heroImage}
+          alt="Frisch angerichtetes Mittagessen"
+          className="block h-[320px] w-full object-cover md:h-[420px] lg:h-[520px]"
+        />
+
+        <div className="px-4 py-8 text-center sm:px-6 lg:px-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-col items-center space-y-5">
             <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Mittagessen warm geliefert, Essen auf Rädern
             </p>
-
-            <div className="w-full rounded-3xl border bg-background p-4 shadow-sm">
-              <img
-                src={heroImage}
-                alt="Frisch angerichtetes Mittagessen"
-                className="h-[320px] w-full rounded-2xl object-cover"
-              />
-            </div>
 
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
               Der Geschmack, der zu Ihnen nach Hause kommt von {supplierName}.
@@ -42,10 +51,16 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
             </p>
 
             <div className="flex flex-wrap justify-center gap-3">
-              <Button size="lg">Wochenmenü ansehen</Button>
+              <Button size="lg" onClick={() => scrollToElement("wochenmenue")}>
+                Wochenmenü ansehen
+              </Button>
 
-              <Button size="lg" variant="outline">
-                Lieferanten entdecken
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => scrollToElement("liefergebiete-suche")}
+              >
+                Liefergebiete entdecken
               </Button>
 
               <Link to="/lieferant-werden">
@@ -115,11 +130,17 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
         </Card>
       </section>
 
-      <section id="lieferanten" className="w-full">
+      <section
+        id="liefergebiete"
+        className="w-full scroll-mt-24 px-4 sm:px-6 lg:px-8"
+      >
         <Suppliers searchValue={searchValue} onSearchChange={onSearchChange} />
       </section>
 
-      <section id="wochenmenue" className="w-full space-y-4">
+      <section
+        id="wochenmenue"
+        className="w-full space-y-4 scroll-mt-24 px-4 sm:px-6 lg:px-8"
+      >
         <div className="space-y-2 px-1">
           <h2 className="text-2xl font-semibold">Aktuelle Wochenmenüs</h2>
           <p className="text-sm text-muted-foreground">

@@ -1,4 +1,5 @@
-import { Menu, ShoppingCart, User } from "lucide-react";
+import { ShoppingCart, User } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { Client } from "../types/client";
 import type { Supplier } from "../contexts/SupplierContext";
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import marieLogo from "../assets/marie-logo.png";
 
 type HeaderProps = {
   user: Client | null;
@@ -28,7 +30,6 @@ type HeaderProps = {
       | "sozialamt-zuschuss"
       | null,
   ) => void;
-  onSidebarToggle?: () => void;
 };
 
 export function Header({
@@ -38,31 +39,24 @@ export function Header({
   onOrdersClick,
   onProfileClick,
   onHeaderDialogChange,
-  onSidebarToggle,
 }: HeaderProps) {
   const fullName = user ? `${user.firstName} ${user.lastName}` : "";
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
       <div className="mx-auto flex min-h-16 items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="shrink-0 lg:hidden"
-            onClick={onSidebarToggle}
-            aria-label="Menü ein- oder ausblenden"
-          >
-            <Menu className="size-5" />
-          </Button>
-
-          <a
-            href="/"
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Link
+            to="/"
             className="min-w-0 truncate text-base font-bold tracking-tight sm:text-xl"
           >
+            <img
+              src={marieLogo}
+              alt="Marie kocht Logo"
+              className="mr-2 inline-block h-6 w-auto align-text-bottom sm:h-8"
+            />
             Marie kocht
-          </a>
+          </Link>
         </div>
 
         <div className="hidden items-center gap-2 lg:flex">

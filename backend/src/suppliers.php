@@ -271,6 +271,226 @@ function getSupplierById(string $id): ?array
 
     return $supplier ? mapSupplierToApi($supplier) : null;
 }
+
+    function getSupplierAuthRowById(string $id): ?array
+{
+    $sql = "
+        SELECT
+            s.id,
+            s.full_name,
+            s.email,
+            s.password_hash,
+            s.phone,
+            s.street,
+            s.house_number,
+            s.postal_code,
+            s.city,
+            s.is_active,
+            s.created_at,
+            s.updated_at,
+            spd.account_holder,
+            spd.iban,
+            spd.paypal_link
+        FROM suppliers s
+        LEFT JOIN supplier_payment_details spd ON spd.supplier_id = s.id
+        WHERE s.id = :id
+        LIMIT 1
+    ";
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute([':id' => $id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function getSupplierProfileForSelf(string $supplierId): ?array
+{
+    $row = getSupplierAuthRowById($supplierId);
+
+    if (!$row) {
+        return null;
+    }
+
+    return [
+        'id' => $row['id'],
+        'fullName' => $row['full_name'],
+        'email' => $row['email'],
+        'phone' => $row['phone'],
+        'street' => $row['street'],
+        'houseNumber' => $row['house_number'],
+        'postalCode' => $row['postal_code'],
+        'city' => $row['city'],
+        'isActive' => (bool) $row['is_active'],
+        'createdAt' => $row['created_at'],
+        'updatedAt' => $row['updated_at'],
+        'payment' => [
+            'accountHolder' => $row['account_holder'],
+            'iban' => $row['iban'],
+            'paypalLink' => $row['paypal_link'],
+        ],
+    ];
+}
+
+function validateSupplierSelfServicePassword(string $password): void
+{
+    if (strlen($password) < 8) {
+        throw new InvalidArgumentException('Das neue Passwort muss mindestens 8 Zeichen lang sein.');
+    }
+
+    if (!preg_match('/[A-Z]/', $password)) {
+        throw new InvalidArgumentException('Das neue Passwort muss mindestens einen Großbuchstaben enthalten.');
+    }
+
+    if (!preg_match('/[a-z]/', $password)) {
+        throw new InvalidArgumentException('Das neue Passwort muss mindestens einen Kleinbuchstaben enthalten.');
+    }
+
+    if (!preg_match('/[0-9]/', $password)) {
+        throw new InvalidArgumentException('Das neue Passwort muss mindestens eine Zahl enthalten.');
+    }
+
+    if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+        throw new InvalidArgumentException('Das neue Passwort muss mindestens ein Sonderzeichen enthalten.');
+    }
+}
+
+function updateSupplierProfileSelfService(string $supplierId, array $data): ?array
+{
+    $existing = getSupplierAuthRowById($supplierId);
+
+    if (!$existing) {
+        return null;
+    }
+
+    $fullName = trim((string) ($data['fullName'] ?? ''));
+    $email = mb_strtolower(trim((string) ($data['email'] ?? '')));
+    $phone = trim((string) ($data['phone'] ?? ''));
+    $street = trim((string) ($data['street'] ?? ''));
+    $houseNumber = trim((string) ($data['houseNumber'] ?? ''));
+    $postalCode = trim((string) ($data['postalCode'] ?? ''));
+    $city = trim((string) ($data['city'] ?? ''));
+    $accountHolder = trim((string) (($data['payment']['accountHolder'] ?? '')));
+    $iban = strtoupper(str_replace(' ', '', trim((string) ($data['payment']['iban'] ?? ''))));
+    $paypalLink = trim((string) ($data['payment']['paypalLink'] ?? ''));
+
+    if ($fullName === '') {
+        throw new InvalidArgumentException('Name ist erforderlich.');
+    }
+
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Bitte eine gültige E-Mail-Adresse eingeben.');
+    }
+
+    if ($street === '') {
+        throw new InvalidArgumentException('Straße ist erforderlich.');
+    }
+
+    if ($houseNumber === '') {
+        throw new InvalidArgumentException('Hausnummer ist erforderlich.');
+    }
+
+    if ($postalCode === '') {
+        throw new InvalidArgumentException('PLZ ist erforderlich.');
+    }
+
+    if ($city === '') {
+        throw new InvalidArgumentException('Ort ist erforderlich.');
+    }
+
+    if ($iban === '' && $paypalLink === '') {
+        throw new InvalidArgumentException('Bitte mindestens IBAN oder PayPal-Link angeben.');
+    }
+
+    if ($paypalLink !== '' && !filter_var($paypalLink, FILTER_VALIDATE_URL)) {
+        throw new InvalidArgumentException('Bitte einen gültigen PayPal-Link angeben.');
+    }
+
+    ensureSupplierEmailIsUnique($email, $supplierId);
+
+    $pdo = db();
+    $pdo->beginTransaction();
+
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE suppliers
+            SET
+                full_name = :full_name,
+                email = :email,
+                phone = :phone,
+                street = :street,
+                house_number = :house_number,
+                postal_code = :postal_code,
+                city = :city
+            WHERE id = :id
+        ");
+
+        $stmt->execute([
+            ':full_name' => $fullName,
+            ':email' => $email,
+            ':phone' => $phone !== '' ? $phone : null,
+            ':street' => $street,
+            ':house_number' => $houseNumber,
+            ':postal_code' => $postalCode,
+            ':city' => $city,
+            ':id' => $supplierId,
+        ]);
+
+        upsertSupplierPaymentDetails($pdo, $supplierId, [
+            'accountHolder' => $accountHolder !== '' ? $accountHolder : null,
+            'iban' => $iban !== '' ? $iban : null,
+            'paypalLink' => $paypalLink !== '' ? $paypalLink : null,
+        ]);
+
+        $pdo->commit();
+
+        return getSupplierProfileForSelf($supplierId);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $e;
+    }
+}
+
+function changeSupplierPasswordSelfService(string $supplierId, array $data): void
+{
+    $currentPassword = (string) ($data['currentPassword'] ?? '');
+    $newPassword = (string) ($data['newPassword'] ?? '');
+
+    if ($currentPassword === '') {
+        throw new InvalidArgumentException('Das aktuelle Passwort ist erforderlich.');
+    }
+
+    if ($newPassword === '') {
+        throw new InvalidArgumentException('Das neue Passwort ist erforderlich.');
+    }
+
+    validateSupplierSelfServicePassword($newPassword);
+
+    $supplier = getSupplierAuthRowById($supplierId);
+
+    if (!$supplier) {
+        throw new RuntimeException('Lieferant nicht gefunden.');
+    }
+
+    if (!password_verify($currentPassword, $supplier['password_hash'])) {
+        throw new InvalidArgumentException('Das aktuelle Passwort ist nicht korrekt.');
+    }
+
+    $stmt = db()->prepare("
+        UPDATE suppliers
+        SET password_hash = :password_hash
+        WHERE id = :id
+    ");
+
+    $stmt->execute([
+        ':password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
+        ':id' => $supplierId,
+    ]);
+}
+
 function searchSuppliers(?string $q): array
 {
     $q = trim((string) $q);

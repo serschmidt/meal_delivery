@@ -53,13 +53,14 @@ type SupplierResponse = {
 };
 
 export function SupplierRegistrationPage() {
-  const [formData, setFormData] = useState<SupplierRegistrationFormData>(initialFormData);
+  const [formData, setFormData] =
+    useState<SupplierRegistrationFormData>(initialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -78,18 +79,18 @@ export function SupplierRegistrationPage() {
     try {
       await apiPost<SupplierResponse, SupplierRegistrationFormData>(
         "suppliers",
-        formData
+        formData,
       );
 
       setSuccessMessage(
-        "Die Registrierung wurde erfolgreich gespeichert. Wir prüfen Ihre Angaben."
+        "Die Registrierung wurde erfolgreich gespeichert. Wir prüfen Ihre Angaben.",
       );
       setFormData(initialFormData);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Die Registrierung konnte nicht gespeichert werden."
+          : "Die Registrierung konnte nicht gespeichert werden.",
       );
     } finally {
       setIsSubmitting(false);
@@ -112,8 +113,8 @@ export function SupplierRegistrationPage() {
 
               <div className="space-y-4 text-base text-muted-foreground sm:text-lg">
                 <p>
-                  Bieten Sie Ihre Gerichte über unsere Plattform an und erreichen
-                  Sie Kundinnen und Kunden in Ihrer Region.
+                  Bieten Sie Ihre Gerichte über unsere Plattform an und
+                  erreichen Sie Kundinnen und Kunden in Ihrer Region.
                 </p>
                 <p>
                   Hinterlegen Sie Ihre Stammdaten sowie Ihre bevorzugten
@@ -121,8 +122,8 @@ export function SupplierRegistrationPage() {
                   eine passende Bezahlaufforderung erhalten können.
                 </p>
                 <p>
-                  Wenn Sie nur mit PayPal arbeiten möchten, genügt ein klickbarer
-                  PayPal-Link. Eine IBAN ist dann nicht erforderlich.
+                  Wenn Sie nur mit PayPal arbeiten möchten, genügt ein
+                  klickbarer PayPal-Link. Eine IBAN ist dann nicht erforderlich.
                 </p>
               </div>
             </div>
@@ -138,6 +139,16 @@ export function SupplierRegistrationPage() {
             </div>
           </div>
         </section>
+
+        <p className="text-sm text-muted-foreground pb-8">
+          Sie haben bereits ein Partnerkonto?{" "}
+          <Link
+            to="/partner-login"
+            className="font-medium underline underline-offset-4"
+          >
+            Hier zum Login
+          </Link>
+        </p>
 
         <section className="rounded-3xl border bg-background p-6 shadow-sm">
           <div className="mx-auto max-w-3xl space-y-6">
@@ -344,8 +355,14 @@ export function SupplierRegistrationPage() {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Registrierung läuft..." : "Registrierung absenden"}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? "Registrierung läuft..."
+                    : "Registrierung absenden"}
                 </Button>
 
                 <Link to="/" className="w-full">

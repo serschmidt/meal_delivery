@@ -40,7 +40,6 @@ export function Sidebar({
   const [impressumOpen, setImpressumOpen] = useState(false);
 
   const isHome = location.pathname === "/";
-  const isRegister = location.pathname === "/lieferant-werden";
 
   const openLegalDialog = (key: Exclude<FooterDialogKey, null>) => {
     setImpressumOpen(false);
@@ -108,13 +107,15 @@ export function Sidebar({
             </Button>
           </a>
 
-          <Link to="/lieferant-werden" className="block" onClick={handleNavigate}>
+          <Link to="/partner-login" className="block" onClick={handleNavigate}>
             <Button
-              variant={isRegister ? "secondary" : "ghost"}
+              variant={
+                location.pathname === "/partner-login" ? "secondary" : "ghost"
+              }
               className="h-14 w-full justify-start px-3 text-sm"
             >
               <UserPlus className="mr-2 h-4 w-4 shrink-0" />
-              <span className="truncate">Partner werden</span>
+              <span className="truncate">Partner</span>
             </Button>
           </Link>
 
@@ -245,8 +246,8 @@ export function Sidebar({
                   <p>
                     Verpflichtungen zur Entfernung oder Sperrung der Nutzung von
                     Informationen nach den allgemeinen Gesetzen bleiben hiervon
-                    unberührt. Eine diesbezügliche Haftung ist jedoch erst ab dem
-                    Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung
+                    unberührt. Eine diesbezügliche Haftung ist jedoch erst ab
+                    dem Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung
                     möglich. Bei Bekanntwerden von entsprechenden
                     Rechtsverletzungen werden wir diese Inhalte umgehend
                     entfernen.
