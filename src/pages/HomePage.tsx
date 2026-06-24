@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { useSupplier } from "../contexts/useSupplier";
 import heroImage from "../assets/marie-kocht.png";
+import { PromoBanner } from "../components/PromoBanner";
 
 type HomePageProps = {
   searchValue: string;
@@ -13,7 +14,7 @@ type HomePageProps = {
 
 export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
   const { selectedSupplier } = useSupplier();
-  const supplierName = selectedSupplier?.fullName ?? "Marie Kocht";
+  const supplierBusinessName = selectedSupplier?.businessName ?? "Marie Kocht";
   const scrollToElement = (id: string) => {
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -29,6 +30,26 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
   return (
     <div className="w-full space-y-10 pb-10">
       <section className="w-full">
+        <div className="mx-auto max-w-4xl rounded-2xl bg-muted/40 px-4 py-3 shadow-sm">
+          <div className="relative min-h-[88px]">
+            <PromoBanner />
+
+            <div className="flex min-h-[88px] items-center justify-center pl-28">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground sm:text-base">
+                  Wenn Sie Hilfe bei Ihrer Bestellung benötigen oder Fragen
+                  haben, rufen Sie mich gerne an unter
+                </p>
+                <a
+                  href="tel:016091259999"
+                  className="mt-1 block text-xl font-bold tracking-tight text-foreground transition-colors hover:text-primary sm:text-2xl"
+                >
+                  0160 9125 9999
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
         <img
           src={heroImage}
           alt="Frisch angerichtetes Mittagessen"
@@ -42,7 +63,7 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
             </p>
 
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Der Geschmack, der zu Ihnen nach Hause kommt von {supplierName}.
+              Der Geschmack, der zu Ihnen nach Hause kommt von {supplierBusinessName}.
             </h1>
 
             <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
@@ -83,17 +104,23 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl">
-          <CardContent className="space-y-2 p-6">
-            <h2 className="text-xl font-semibold">
-              2. Lieblingsessen aussuchen
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Entdecke die Gerichte der aktuellen Woche und lege passende Menüs
-              in deinen Warenkorb.
-            </p>
-          </CardContent>
-        </Card>
+        <Link
+          to="/essen-auf-raedern"
+          className="block rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          aria-label="Zur Seite Essen auf Rädern wechseln"
+        >
+          <Card className="rounded-2xl transition-colors hover:border-primary/40 hover:bg-muted/40">
+            <CardContent className="space-y-2 p-6">
+              <h2 className="text-xl font-semibold">
+                2. Lieblingsessen aussuchen
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Entdecken Sie die Gerichte der aktuellen Woche und wählen Sie
+                passende Menüs bequem auf der Seite Essen auf Rädern aus.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card className="rounded-2xl">
           <CardContent className="space-y-2 p-6">
@@ -128,6 +155,33 @@ export function HomePage({ searchValue, onSearchChange }: HomePageProps) {
             </p>
           </CardContent>
         </Card>
+      </section>
+
+      <section className="w-full px-4 sm:px-6 lg:px-8">
+        <Link
+          to="/lieferdienst"
+          className="block rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          aria-label="Zum Lieferdienst wechseln"
+        >
+          <Card className="rounded-2xl border-primary/20 bg-primary/5 transition-colors hover:bg-primary/10">
+            <CardContent className="p-6">
+              <div className="space-y-2">
+                <p className="text-sm font-medium uppercase tracking-wide text-primary">
+                  Neuer Service
+                </p>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Einkaufen, abholen und liefern lassen
+                </h2>
+                <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+                  Neben Essen auf Rädern bieten wir jetzt auch unseren
+                  Lieferdienst an: Einkäufe erledigen lassen, bereits bezahlte
+                  Bestellungen abholen oder Artikel bequem nach Hause liefern
+                  lassen.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </section>
 
       <section

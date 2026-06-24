@@ -5,6 +5,71 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../src/mailer.php';
 
+function reserveNextSupplierOrderNumber(PDO $pdo, string $supplierId): int
+{
+    $supplierId = trim($supplierId);
+
+    if ($supplierId === '') {
+        throw new InvalidArgumentException('supplier_id is required');
+    }
+
+    $insertStmt = $pdo->prepare("
+        INSERT INTO supplier_order_counters (supplier_id, last_order_number)
+        VALUES (:supplier_id, 1000)
+        ON DUPLICATE KEY UPDATE supplier_id = supplier_id
+    ");
+    $insertStmt->execute([
+        ':supplier_id' => $supplierId,
+    ]);
+
+    $selectStmt = $pdo->prepare("
+        SELECT last_order_number
+        FROM supplier_order_counters
+        WHERE supplier_id = :supplier_id
+        FOR UPDATE
+    ");
+    $selectStmt->execute([
+        ':supplier_id' => $supplierId,
+    ]);
+
+    $current = $selectStmt->fetchColumn();
+
+    if ($current === false) {
+        throw new RuntimeException('Supplier order counter could not be loaded.');
+    }
+
+    $next = ((int) $current) + 1;
+
+    $updateStmt = $pdo->prepare("
+        UPDATE supplier_order_counters
+        SET last_order_number = :last_order_number
+        WHERE supplier_id = :supplier_id
+    ");
+    $updateStmt->execute([
+        ':last_order_number' => $next,
+        ':supplier_id' => $supplierId,
+    ]);
+
+    return $next;
+}
+
+function formatExternalOrderNumber(array $order): ?string
+{
+    $supplierOrderNumber = isset($order['supplier_order_number'])
+        ? (int) $order['supplier_order_number']
+        : 0;
+
+    if ($supplierOrderNumber <= 0) {
+        return null;
+    }
+
+    $year = !empty($order['created_at'])
+        ? date('Y', strtotime((string) $order['created_at']))
+        : date('Y');
+
+    return $year . '-' . $supplierOrderNumber;
+}
+
 function mapOrderRow(array $row): array
 {
     $order = [
@@ -16,8 +81,11 @@ function mapOrderRow(array $row): array
         'customer_id' => (string) $row['customer_id'],
         'delivery_address_id' => binToUuid($row['delivery_address_id']),
         'supplier_id' => (string) $row['supplier_id'],
+        'supplier_order_number' => isset($row['supplier_order_number']) ? (int) $row['supplier_order_number'] : null,
         'weekly_menu_id' => binToUuid($row['weekly_menu_id']),
     ];
+
+    $order['order_number'] = formatExternalOrderNumber($order);
 
     if (array_key_exists('customer_ref_id', $row)) {
         $order['customer'] = [
@@ -33,7 +101,7 @@ function mapOrderRow(array $row): array
 
 function mapOrderRowForSupplier(array $row): array
 {
-    return [
+    $order = [
         'id' => binToUuid($row['id']),
         'created_at' => $row['created_at'],
         'status' => $row['status'],
@@ -42,6 +110,7 @@ function mapOrderRowForSupplier(array $row): array
         'customer_id' => (string) $row['customer_id'],
         'delivery_address_id' => binToUuid($row['delivery_address_id']),
         'supplier_id' => (string) $row['supplier_id'],
+        'supplier_order_number' => isset($row['supplier_order_number']) ? (int) $row['supplier_order_number'] : null,
         'weekly_menu_id' => binToUuid($row['weekly_menu_id']),
 
         'customer' => [
@@ -67,6 +136,10 @@ function mapOrderRowForSupplier(array $row): array
             'city' => $row['billing_city'],
         ],
     ];
+
+    $order['order_number'] = formatExternalOrderNumber($order);
+
+    return $order;
 }
 
 function getOrderItems(string $orderId): array
@@ -93,9 +166,9 @@ SQL;
 
     $stmt = db()->prepare($sql);
     $stmt->execute([':order_id' => uuidToBin($orderId)]);
-    $rows = $stmt->fetchAll();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    return array_map(function (array $row): array {
+    return array_map(static function (array $row): array {
         return [
             'id' => binToUuid($row['id']),
             'line_total' => (float) $row['line_total'],
@@ -124,6 +197,7 @@ SELECT
     o.customer_id,
     o.delivery_address_id,
     o.supplier_id,
+    o.supplier_order_number,
     o.weekly_menu_id,
     c.id AS customer_ref_id,
     c.full_name AS customer_full_name,
@@ -161,6 +235,7 @@ SELECT
     o.customer_id,
     o.delivery_address_id,
     o.supplier_id,
+    o.supplier_order_number,
     o.weekly_menu_id,
     c.id AS customer_ref_id,
     c.full_name AS customer_full_name,
@@ -279,6 +354,7 @@ SELECT
     o.customer_id,
     o.delivery_address_id,
     o.supplier_id,
+    o.supplier_order_number,
     o.weekly_menu_id,
 
     c.id AS customer_ref_id,
@@ -359,6 +435,7 @@ SELECT
     o.customer_id,
     o.delivery_address_id,
     o.supplier_id,
+    o.supplier_order_number,
     o.weekly_menu_id,
 
     c.id AS customer_ref_id,

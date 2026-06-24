@@ -372,7 +372,7 @@ function getUpcomingWeeklyMenus(): array
             wm.end_date,
             wm.image_url
         FROM weekly_menus wm
-        WHERE wm.end_date >= CURDATE()
+        WHERE wm.start_date > CURDATE()
         ORDER BY wm.start_date ASC, wm.calendar_week ASC
     ";
 

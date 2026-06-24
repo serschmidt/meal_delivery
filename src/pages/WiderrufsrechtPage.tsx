@@ -23,7 +23,7 @@ export function WiderrufsrechtPage() {
       {selectedSupplier && (
         <section className="space-y-2 rounded-md border p-4">
           <h2 className="text-xl font-semibold">Ausgewählter Lieferant</h2>
-          <p>{selectedSupplier.fullName}</p>
+          <p>{selectedSupplier.businessName}</p>
           {address && (
             <>
               <p>

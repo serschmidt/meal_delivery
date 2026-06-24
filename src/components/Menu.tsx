@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { useCart } from "../contexts/useCart";
 import { useSupplier } from "../contexts/useSupplier";
+import { isOrderable } from "../lib/orderability";
 import { toast } from "sonner";
 import { apiGet } from "../lib/api";
 import marieLogo from "../assets/marie-logo.png";
@@ -104,31 +105,6 @@ function formatDeliveryDate(value: string | null) {
     month: "2-digit",
     year: "numeric",
   });
-}
-
-function toLocalDateOnly(value: string | null) {
-  if (!value) return null;
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-}
-
-function getDaysUntilDelivery(deliveryDate: string | null) {
-  const targetDate = toLocalDateOnly(deliveryDate);
-  if (!targetDate) return null;
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  const diffInMs = targetDate.getTime() - today.getTime();
-  return Math.round(diffInMs / (1000 * 60 * 60 * 24));
-}
-
-function isOrderable(deliveryDate: string | null) {
-  const daysUntilDelivery = getDaysUntilDelivery(deliveryDate);
-  return daysUntilDelivery !== null && daysUntilDelivery >= 7;
 }
 
 function normalizeMeal(meal: ApiMeal | null | undefined): WeeklyMeal {
@@ -277,7 +253,7 @@ export function Menu() {
         setError("");
 
         const data = await apiGet<ApiWeeklyMenu[]>(
-          "weekly-menus",
+          "weekly-menus/upcoming",
           undefined,
           controller.signal,
         );
@@ -333,7 +309,7 @@ export function Menu() {
         <p className="text-sm text-muted-foreground">
           Aktiver Lieferant:{" "}
           <span className="font-medium text-foreground">
-            {selectedSupplier.fullName}
+            {selectedSupplier.businessName ?? selectedSupplier.fullName ?? "–"}
           </span>
         </p>
       )}

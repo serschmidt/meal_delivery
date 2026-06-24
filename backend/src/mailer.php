@@ -7,6 +7,8 @@ use PHPMailer\PHPMailer\Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
+
+require_once __DIR__ . '/payment_qr.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 function e(?string $value): string
@@ -16,6 +18,115 @@ function e(?string $value): string
         ENT_QUOTES | ENT_SUBSTITUTE,
         'UTF-8'
     );
+}
+
+function supplierDisplayName(array $supplier): string
+{
+    $businessName = trim((string) ($supplier['businessName'] ?? ''));
+    if ($businessName !== '') {
+        return $businessName;
+    }
+
+    $fullName = trim((string) ($supplier['fullName'] ?? ''));
+    if ($fullName !== '') {
+        return $fullName;
+    }
+
+    return 'Lieferant';
+}
+
+function orderDisplayNumber(array $order): string
+{
+    $number = trim((string) ($order['order_number'] ?? ''));
+
+    if ($number !== '') {
+        return $number;
+    }
+
+    if (function_exists('formatExternalOrderNumber')) {
+        $generated = formatExternalOrderNumber($order);
+        if (!empty($generated)) {
+            return $generated;
+        }
+    }
+
+    return '–';
+}
+
+function orderPaymentPurpose(array $order): string
+{
+    return 'Bestellung ' . orderDisplayNumber($order);
+}
+
+function buildPaymentQrImageData(array $order, array $supplier): ?string
+{
+    $iban = trim((string) ($supplier['payment']['iban'] ?? ''));
+    if ($iban === '') {
+        return null;
+    }
+
+    $recipient = trim((string) (
+        $supplier['payment']['accountHolder']
+        ?? $supplier['businessName']
+        ?? $supplier['fullName']
+        ?? ''
+    ));
+
+    if ($recipient === '') {
+        return null;
+    }
+
+    $amount = (float) ($order['total_price'] ?? 0);
+    if ($amount <= 0) {
+        return null;
+    }
+
+    $reference = orderPaymentPurpose($order);
+
+    $bic = trim((string) ($supplier['payment']['bic'] ?? ''));
+    if ($bic === '') {
+        $bic = null;
+    }
+
+    return generateEpcQrPngData(
+        $recipient,
+        $iban,
+        $amount,
+        $reference,
+        $bic,
+        '',
+        ''
+    );
+}
+
+function buildPaymentQrResponseData(array $order, array $supplier): array
+{
+    try {
+        $pngData = buildPaymentQrImageData($order, $supplier);
+
+        if ($pngData === null) {
+            return [
+                'available' => false,
+                'mimeType' => null,
+                'imageBase64' => null,
+                'purpose' => orderPaymentPurpose($order),
+            ];
+        }
+
+        return [
+            'available' => true,
+            'mimeType' => 'image/png',
+            'imageBase64' => base64_encode($pngData),
+            'purpose' => orderPaymentPurpose($order),
+        ];
+    } catch (Throwable $e) {
+        return [
+            'available' => false,
+            'mimeType' => null,
+            'imageBase64' => null,
+            'purpose' => orderPaymentPurpose($order),
+        ];
+    }
 }
 
 function createMailer(): PHPMailer
@@ -51,6 +162,14 @@ function createMailer(): PHPMailer
 // ── E-Mail an Kunden ──────────────────────────────────────────────────────
 function sendOrderConfirmationToCustomer(array $order, array $customer, array $supplier): void
 {
+    $qrImageData = null;
+
+try {
+    $qrImageData = buildPaymentQrImageData($order, $supplier);
+} catch (Throwable $e) {
+    error_log('QR ERROR message=' . $e->getMessage());
+}
+
     $email = trim((string) ($customer['email'] ?? ''));
     if ($email === '') {
         throw new InvalidArgumentException('Customer email is missing');
@@ -59,9 +178,18 @@ function sendOrderConfirmationToCustomer(array $order, array $customer, array $s
     $mail = createMailer();
     $mail->addAddress($email, (string) ($customer['full_name'] ?? 'Kunde'));
     $mail->isHTML(true);
-    $mail->Subject = 'Ihre Bestellbestätigung – Marie kocht';
+    $mail->Subject = 'Ihre Bestellübersicht – Marie kocht';
     $mail->Body = buildCustomerEmailHtml($order, $customer, $supplier);
     $mail->AltBody = buildCustomerEmailText($order, $customer, $supplier);
+    if ($qrImageData !== null) {
+        $mail->addStringEmbeddedImage(
+            $qrImageData,
+            'payment_qr',
+            'payment-qr.png',
+            'base64',
+            'image/png'
+        );
+    }
     $mail->send();
 }
 
@@ -74,7 +202,7 @@ function sendOrderNotificationToSupplier(array $order, array $customer, array $s
     }
 
     $mail = createMailer();
-    $mail->addAddress($email, (string) ($supplier['fullName'] ?? 'Lieferant'));
+    $mail->addAddress($email, supplierDisplayName($supplier));
     $mail->isHTML(true);
     $mail->Subject = 'Neue Bestellung eingegangen – ' . (string) ($customer['full_name'] ?? 'Kunde');
     $mail->Body = buildSupplierEmailHtml($order, $customer, $supplier);
@@ -132,6 +260,9 @@ function buildItemsText(array $items): string
 // ── HTML Template Kunde ───────────────────────────────────────────────────
 function buildCustomerEmailHtml(array $order, array $customer, array $supplier): string
 {
+    $orderNumber = e(orderDisplayNumber($order));
+    $paymentPurpose = e(orderPaymentPurpose($order));
+    $supplierName = e(supplierDisplayName($supplier));
     $itemsHtml = buildItemsHtml($order['items'] ?? []);
     $totalPrice = number_format((float) ($order['total_price'] ?? 0), 2, ',', '.');
     $createdAt = !empty($order['created_at'])
@@ -141,28 +272,67 @@ function buildCustomerEmailHtml(array $order, array $customer, array $supplier):
     $name = e((string) ($customer['full_name'] ?? 'Kunde'));
     $street = e(trim((string) ($customer['street'] ?? '') . ' ' . (string) ($customer['house_number'] ?? '')));
     $city = e(trim((string) ($customer['postal_code'] ?? '') . ' ' . (string) ($customer['city'] ?? '')));
+$hasIban = !empty($supplier['payment']['iban']);
+// $hasPaypal = !empty($supplier['payment']['paypalLink']);
+$hasPaymentQr = $hasIban;
 
-    $paymentHtml = '';
-    $hasIban = !empty($supplier['payment']['iban']);
-    // $hasPaypal = !empty($supplier['payment']['paypalLink']);
+$paymentHtml = "<h3>Zahlungsinformationen</h3>";
 
-    if ($hasIban) {
-        $holder = e((string) ($supplier['payment']['accountHolder'] ?? $supplier['fullName'] ?? ''));
-        $iban = e((string) ($supplier['payment']['iban'] ?? ''));
+if ($hasIban) {
+    $holder = e((string) ($supplier['payment']['accountHolder'] ?? supplierDisplayName($supplier)));
+    $iban = e((string) ($supplier['payment']['iban'] ?? ''));
 
-        $paymentHtml .= "
-        <h3>Zahlung per Überweisung</h3>
-        <table style='border-collapse:collapse;margin:8px 0;font-size:14px;'>
-            <tr>
-                <td style='padding:4px 12px 4px 0;color:#666;'>Kontoinhaber</td>
-                <td style='padding:4px 0;font-weight:bold;'>{$holder}</td>
-            </tr>
-            <tr>
-                <td style='padding:4px 12px 4px 0;color:#666;'>IBAN</td>
-                <td style='padding:4px 0;font-weight:bold;'>{$iban}</td>
-            </tr>
-        </table>";
-    }
+    $paymentHtml .= "
+    <p>Bitte übernehmen Sie die folgenden Zahlungsdaten exakt in Ihre Überweisung:</p>
+    <table style='border-collapse:collapse;margin:8px 0;font-size:14px;'>
+        <tr>
+            <td style='padding:4px 12px 4px 0;color:#666;'>Empfänger</td>
+            <td style='padding:4px 0;font-weight:bold;'>{$holder}</td>
+        </tr>
+        <tr>
+            <td style='padding:4px 12px 4px 0;color:#666;'>IBAN</td>
+            <td style='padding:4px 0;font-weight:bold;'>{$iban}</td>
+        </tr>
+        <tr>
+            <td style='padding:4px 12px 4px 0;color:#666;'>Betrag</td>
+            <td style='padding:4px 0;font-weight:bold;'>€ {$totalPrice}</td>
+        </tr>
+        <tr>
+            <td style='padding:4px 12px 4px 0;color:#666;'>Verwendungszweck</td>
+            <td style='padding:4px 0;font-weight:bold;'>{$paymentPurpose}</td>
+        </tr>
+        <tr>
+            <td style='padding:4px 12px 4px 0;color:#666;'>Bestellnummer</td>
+            <td style='padding:4px 0;font-weight:bold;'>{$orderNumber}</td>
+        </tr>
+    </table>
+    <p style='font-size:12px;color:#666;'>Tipp: Sie können diese Daten direkt aus dieser E-Mail in Ihr Online-Banking übernehmen.</p>";
+} else {
+    $paymentHtml .= "
+    <p>Bitte kontaktieren Sie den Lieferanten direkt für Zahlungsdetails.</p>
+    <p><strong>Bestellnummer:</strong> {$orderNumber}<br>
+    <strong>Verwendungszweck:</strong> {$paymentPurpose}</p>";
+}
+
+if ($hasPaymentQr) {
+    $paymentHtml .= "
+    <div style='margin-top:16px;padding:16px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;text-align:center;'>
+        <p style='margin:0 0 12px 0;font-size:14px;color:#374151;font-weight:600;'>
+            QR-Code für Ihre Überweisung
+        </p>
+        <p style='margin:0 0 12px 0;font-size:13px;color:#6b7280;line-height:1.5;'>
+            Scannen Sie den QR-Code mit Ihrer Banking-App, um Empfänger, IBAN, Betrag und Verwendungszweck automatisch zu übernehmen.
+        </p>
+        <img
+            src='cid:payment_qr'
+            alt='QR-Code für SEPA-Überweisung'
+            width='220'
+            height='220'
+            style='display:block;margin:0 auto;max-width:220px;height:auto;'
+        />
+    </div>";
+}
+
 
     // if ($hasPaypal) {
     //     $paypalLink = e((string) ($supplier['payment']['paypalLink'] ?? ''));
@@ -178,10 +348,7 @@ function buildCustomerEmailHtml(array $order, array $customer, array $supplier):
     //     <p style='font-size:12px;color:#666;'>{$paypalLink}</p>";
     // }
 
-    if (!$hasIban) {
-    // if (!$hasIban && !$hasPaypal) {
-        $paymentHtml = "<p>Bitte kontaktieren Sie den Lieferanten direkt für Zahlungsdetails.</p>";
-    }
+
 
     return "
     <!DOCTYPE html>
@@ -192,12 +359,13 @@ function buildCustomerEmailHtml(array $order, array $customer, array $supplier):
     </head>
     <body style='font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;'>
         <h1 style='color:#1a1a1a;border-bottom:2px solid #f0f0f0;padding-bottom:10px;'>
-            Ihre Bestellbestätigung
+            Ihre Bestellübersicht
         </h1>
-
+        
         <p>Guten Tag {$name},</p>
         <p>vielen Dank für Ihre Bestellung bei <strong>Marie kocht</strong>.
-        Wir haben Ihre Bestellung verbindlich aufgenommen.</p>
+            Wir haben Ihre Bestellung verbindlich aufgenommen.</p>
+        <p><strong>Bestellnummer:</strong> {$orderNumber}</p>
 
         <table style='width:100%;border-collapse:collapse;margin:20px 0;'>
             <tr style='background:#f8f8f8;'>
@@ -232,12 +400,13 @@ function buildCustomerEmailHtml(array $order, array $customer, array $supplier):
 // ── HTML Template Lieferant ───────────────────────────────────────────────
 function buildSupplierEmailHtml(array $order, array $customer, array $supplier): string
 {
+    $orderNumber = e(orderDisplayNumber($order));
     $itemsHtml = buildItemsHtml($order['items'] ?? []);
     $totalPrice = number_format((float) ($order['total_price'] ?? 0), 2, ',', '.');
     $createdAt = !empty($order['created_at'])
         ? date('d.m.Y H:i', strtotime((string) $order['created_at']))
         : '';
-    $supplierName = e((string) ($supplier['fullName'] ?? 'Lieferant'));
+    $supplierName = e(supplierDisplayName($supplier));
     $custName = e((string) ($customer['full_name'] ?? 'Kunde'));
     $street = e(trim((string) ($customer['street'] ?? '') . ' ' . (string) ($customer['house_number'] ?? '')));
     $city = e(trim((string) ($customer['postal_code'] ?? '') . ' ' . (string) ($customer['city'] ?? '')));
@@ -261,7 +430,9 @@ function buildSupplierEmailHtml(array $order, array $customer, array $supplier):
         </h1>
 
         <p>Guten Tag {$supplierName},</p>
-        <p>eine neue Bestellung wurde aufgegeben. Bitte bereiten Sie die Lieferung vor.</p>
+        <p>eine neue Bestellung wurde aufgegeben. </p>
+        <p><strong>Bestellnummer:</strong> {$orderNumber}</p>
+        <p>Bitte bereiten Sie die Lieferung vor.</p>
 
         <h3>Kunde</h3>
         <p>
@@ -302,26 +473,33 @@ function buildSupplierEmailHtml(array $order, array $customer, array $supplier):
 // ── Plain Text Fallbacks ──────────────────────────────────────────────────
 function buildCustomerEmailText(array $order, array $customer, array $supplier): string
 {
+    $orderNumber = orderDisplayNumber($order);
+    $paymentPurpose = orderPaymentPurpose($order);
     $total = number_format((float) ($order['total_price'] ?? 0), 2, ',', '.');
     $items = buildItemsText($order['items'] ?? []);
     $status = (string) ($order['status'] ?? '');
 
     $paymentText = '';
     if (!empty($supplier['payment']['iban'])) {
-        $holder = (string) ($supplier['payment']['accountHolder'] ?? $supplier['fullName'] ?? '');
+        $holder = (string) ($supplier['payment']['accountHolder'] ?? supplierDisplayName($supplier));
         $paymentText .= "\nZahlung per Überweisung:\n"
-            . "Kontoinhaber: {$holder}\n"
-            . "IBAN: " . (string) $supplier['payment']['iban'] . "\n";
+            . "Empfänger: {$holder}\n"
+            . "IBAN: " . (string) $supplier['payment']['iban'] . "\n"
+            . "Betrag: € {$total}\n"
+            . "Verwendungszweck: {$paymentPurpose}\n";
     }
     // if (!empty($supplier['payment']['paypalLink'])) {
     //     $paymentText .= "\nZahlung per PayPal:\n"
     //         . (string) $supplier['payment']['paypalLink'] . "\n";
     // }
-    if (empty($supplier['payment']['iban']) && empty($supplier['payment']['paypalLink'])) {
-        $paymentText .= "\nBitte kontaktieren Sie den Lieferanten direkt für Zahlungsdetails.\n";
-    }
+if (empty($supplier['payment']['iban']) && empty($supplier['payment']['paypalLink'])) {
+    $paymentText .= "\nBitte kontaktieren Sie den Lieferanten direkt für Zahlungsdetails.\n"
+        . "Bestellnummer: {$orderNumber}\n"
+        . "Verwendungszweck: {$paymentPurpose}\n";
+}
 
-    return "Ihre Bestellbestätigung – Marie kocht\n\n"
+    return "Ihre Bestellübersicht – Marie kocht\n\n"
+        . "Bestellnummer: {$orderNumber}\n\n"
         . "Guten Tag " . (string) ($customer['full_name'] ?? 'Kunde') . ",\n"
         . "vielen Dank für Ihre Bestellung.\n\n"
         . $items . "\n"
@@ -334,8 +512,10 @@ function buildSupplierEmailText(array $order, array $customer, array $supplier):
 {
     $total = number_format((float) ($order['total_price'] ?? 0), 2, ',', '.');
     $items = buildItemsText($order['items'] ?? []);
+    $orderNumber = orderDisplayNumber($order);
 
     return "Neue Bestellung – Marie kocht\n\n"
+        . "Bestellnummer: {$orderNumber}\n"
         . "Kunde: " . (string) ($customer['full_name'] ?? 'Kunde') . "\n"
         . (string) ($customer['street'] ?? '') . ' ' . (string) ($customer['house_number'] ?? '') . ", "
         . (string) ($customer['postal_code'] ?? '') . ' ' . (string) ($customer['city'] ?? '') . "\n"

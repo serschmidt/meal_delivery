@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/../src/mailer.php';
+require_once __DIR__ . '/../src/orders.php';
 
 function normalizeNullableString(mixed $value): ?string
 {
@@ -212,24 +213,27 @@ SQL;
         // 4. Bestellung anlegen
         $orderId = generateUuid();
 
+        $supplierOrderNumber = reserveNextSupplierOrderNumber($pdo, (string) $data['supplier_id']);
+
         $pdo->prepare(<<<SQL
 INSERT INTO orders (
     id, created_at, status, total_price,
     billing_address_id, customer_id,
-    delivery_address_id, supplier_id, weekly_menu_id
+    delivery_address_id, supplier_id, supplier_order_number, weekly_menu_id
 ) VALUES (
     :id, NOW(6), 'PENDING', :total_price,
     :billing_address_id, :customer_id,
-    :delivery_address_id, :supplier_id, :weekly_menu_id
+    :delivery_address_id, :supplier_id, :supplier_order_number, :weekly_menu_id
 )
 SQL)->execute([
-            ':id'                  => uuidToBin($orderId),
-            ':total_price'         => round($totalPrice, 2),
-            ':billing_address_id'  => uuidToBin($billingAddressId),
-            ':customer_id'         => $customerId,
+            ':id' => uuidToBin($orderId),
+            ':total_price' => round($totalPrice, 2),
+            ':billing_address_id' => uuidToBin($billingAddressId),
+            ':customer_id' => $customerId,
             ':delivery_address_id' => uuidToBin($deliveryAddressId),
-            ':supplier_id'         => $data['supplier_id'],
-            ':weekly_menu_id'      => uuidToBin($data['weekly_menu_id']),
+            ':supplier_id' => $data['supplier_id'],
+            ':supplier_order_number' => $supplierOrderNumber,
+            ':weekly_menu_id' => uuidToBin($data['weekly_menu_id']),
         ]);
 
         // 5. Bestellpositionen
@@ -271,25 +275,17 @@ SQL);
         // 7. E-Mails versenden – nach commit, außerhalb der Transaktion
         try {
             $supplierData = getSupplierById($data['supplier_id']);
-
-            error_log('MAIL DEBUG customer=' . json_encode($data['customer'], JSON_UNESCAPED_UNICODE));
-            error_log('MAIL DEBUG supplier=' . json_encode($supplierData, JSON_UNESCAPED_UNICODE));
-            error_log('MAIL DEBUG order=' . json_encode($completedOrder, JSON_UNESCAPED_UNICODE));
-
+            $completedOrder['payment_qr'] = buildPaymentQrResponseData($completedOrder, $supplierData);
             if (!empty($data['customer']['email'])) {
-                error_log('MAIL DEBUG sending customer confirmation to ' . $data['customer']['email']);
 
                 sendOrderConfirmationToCustomer(
                     $completedOrder,
                     $data['customer'],
                     $supplierData ?? []
                 );
-
-                error_log('MAIL DEBUG customer confirmation sent');
             }
 
             if (!empty($supplierData['email'])) {
-                error_log('MAIL DEBUG sending supplier notification to ' . $supplierData['email']);
 
                 sendOrderNotificationToSupplier(
                     $completedOrder,
@@ -297,12 +293,10 @@ SQL);
                     $supplierData
                 );
 
-                error_log('MAIL DEBUG supplier notification sent');
             }
         } catch (Throwable $mailError) {
             error_log('MAIL ERROR message=' . $mailError->getMessage());
             error_log('MAIL ERROR file=' . $mailError->getFile() . ':' . $mailError->getLine());
-            error_log('MAIL ERROR trace=' . $mailError->getTraceAsString());
         }
 
         return $completedOrder;

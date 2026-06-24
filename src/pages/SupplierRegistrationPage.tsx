@@ -6,10 +6,14 @@ import { apiPost } from "../lib/api";
 import supplierImage from "../assets/liefer.png";
 
 type SupplierRegistrationFormData = {
-  supplierName: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  businessName: string;
   email: string;
   password: string;
   phone: string;
+  website: string;
   street: string;
   houseNumber: string;
   postalCode: string;
@@ -21,10 +25,14 @@ type SupplierRegistrationFormData = {
 };
 
 const initialFormData: SupplierRegistrationFormData = {
-  supplierName: "",
+  firstName: "",
+  lastName: "",
+  fullName: "",
+  businessName: "",
   email: "",
   password: "",
   phone: "",
+  website: "",
   street: "",
   houseNumber: "",
   postalCode: "",
@@ -37,19 +45,27 @@ const initialFormData: SupplierRegistrationFormData = {
 
 type SupplierResponse = {
   id: string;
-  full_name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName: string;
+  businessName?: string | null;
   email: string;
   phone: string | null;
-  street: string;
-  house_number: string;
-  postal_code: string;
-  city: string;
-  is_active: number;
-  created_at: string;
-  updated_at: string;
-  account_holder: string | null;
-  iban: string | null;
-  paypal_link: string | null;
+  website?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  payment: {
+    accountHolder: string | null;
+    iban: string | null;
+    paypalLink: string | null;
+  };
+  address: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+  };
 };
 
 export function SupplierRegistrationPage() {
@@ -64,11 +80,23 @@ export function SupplierRegistrationPage() {
   ) => {
     const { name, value } = e.target;
 
+    setSuccessMessage("");
+    setErrorMessage("");
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
+
+  const isFormValid =
+    formData.businessName.trim() !== "" &&
+    formData.email.trim() !== "" &&
+    formData.password.trim() !== "" &&
+    formData.street.trim() !== "" &&
+    formData.houseNumber.trim() !== "" &&
+    formData.postalCode.trim() !== "" &&
+    formData.city.trim() !== "" &&
+    (formData.iban.trim() !== "" || formData.paypalLink.trim() !== "");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -76,10 +104,35 @@ export function SupplierRegistrationPage() {
     setSuccessMessage("");
     setErrorMessage("");
 
+    const normalizedFullName =
+      formData.fullName.trim() ||
+      [formData.firstName.trim(), formData.lastName.trim()]
+        .filter(Boolean)
+        .join(" ") ||
+      formData.businessName.trim();
+
     try {
       await apiPost<SupplierResponse, SupplierRegistrationFormData>(
         "suppliers",
-        formData,
+        {
+          ...formData,
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          fullName: normalizedFullName,
+          businessName: formData.businessName.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          phone: formData.phone.trim(),
+          website: formData.website.trim(),
+          street: formData.street.trim(),
+          houseNumber: formData.houseNumber.trim(),
+          postalCode: formData.postalCode.trim(),
+          city: formData.city.trim(),
+          accountHolder: formData.accountHolder.trim(),
+          iban: formData.iban.trim(),
+          paypalLink: formData.paypalLink.trim(),
+          referrerName: formData.referrerName.trim(),
+        },
       );
 
       setSuccessMessage(
@@ -140,7 +193,7 @@ export function SupplierRegistrationPage() {
           </div>
         </section>
 
-        <p className="text-sm text-muted-foreground pb-8">
+        <p className="pb-8 text-sm text-muted-foreground">
           Sie haben bereits ein Partnerkonto?{" "}
           <Link
             to="/partner-login"
@@ -157,8 +210,8 @@ export function SupplierRegistrationPage() {
                 Registrierung als Lieferant
               </h2>
               <p className="text-sm text-muted-foreground">
-                Tragen Sie Ihre Daten ein. Mindestens IBAN oder PayPal-Link muss
-                vorhanden sein.
+                Tragen Sie Ihre Daten ein. Firmenname sowie mindestens IBAN oder
+                PayPal-Link sind erforderlich.
               </p>
             </div>
 
@@ -175,18 +228,76 @@ export function SupplierRegistrationPage() {
             )}
 
             <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="firstName" className="text-sm font-medium">
+                    Vorname
+                  </label>
+                  <Input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    placeholder="z. B. Max"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="lastName" className="text-sm font-medium">
+                    Nachname
+                  </label>
+                  <Input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    placeholder="z. B. Mustermann"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <label htmlFor="supplierName" className="text-sm font-medium">
-                  Name des Lieferanten
+                <label htmlFor="businessName" className="text-sm font-medium">
+                  Firmenname
                 </label>
                 <Input
-                  id="supplierName"
-                  name="supplierName"
+                  id="businessName"
+                  name="businessName"
                   type="text"
-                  value={formData.supplierName}
+                  value={formData.businessName}
                   onChange={handleChange}
-                  placeholder="z. B. Max Mustermann"
+                  placeholder="z. B. Musterküche GmbH"
                   required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="fullName" className="text-sm font-medium">
+                  Anzeigename / Vollständiger Name
+                </label>
+                <Input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  placeholder="Optional, sonst automatisch aus Vorname/Nachname oder Firmenname"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="website" className="text-sm font-medium">
+                  Website
+                </label>
+                <Input
+                  id="website"
+                  name="website"
+                  type="url"
+                  value={formData.website}
+                  onChange={handleChange}
+                  placeholder="https://example.de"
                 />
               </div>
 
@@ -358,7 +469,7 @@ export function SupplierRegistrationPage() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isFormValid}
                 >
                   {isSubmitting
                     ? "Registrierung läuft..."

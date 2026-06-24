@@ -9,7 +9,11 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 type FormState = {
+  firstName: string;
+  lastName: string;
   fullName: string;
+  businessName: string;
+  website: string;
   email: string;
   phone: string;
   street: string;
@@ -25,11 +29,32 @@ type SupplierProfilePanelProps = {
   onClose?: () => void;
 };
 
-export function SupplierProfilePanel({
-  onClose,
-}: SupplierProfilePanelProps) {
+function mapProfileToForm(profile: SupplierProfile): FormState {
+  return {
+    firstName: profile.firstName ?? "",
+    lastName: profile.lastName ?? "",
+    fullName: profile.fullName ?? "",
+    businessName: profile.businessName ?? "",
+    website: profile.website ?? "",
+    email: profile.email ?? "",
+    phone: profile.phone ?? "",
+    street: profile.street ?? "",
+    houseNumber: profile.houseNumber ?? "",
+    postalCode: profile.postalCode ?? "",
+    city: profile.city ?? "",
+    accountHolder: profile.payment?.accountHolder ?? "",
+    iban: profile.payment?.iban ?? "",
+    paypalLink: profile.payment?.paypalLink ?? "",
+  };
+}
+
+export function SupplierProfilePanel({ onClose }: SupplierProfilePanelProps) {
   const [form, setForm] = useState<FormState>({
+    firstName: "",
+    lastName: "",
     fullName: "",
+    businessName: "",
+    website: "",
     email: "",
     phone: "",
     street: "",
@@ -45,30 +70,29 @@ export function SupplierProfilePanel({
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const isFormValid =
+    form.businessName.trim() !== "" &&
+    form.email.trim() !== "" &&
+    form.street.trim() !== "" &&
+    form.houseNumber.trim() !== "" &&
+    form.postalCode.trim() !== "" &&
+    form.city.trim() !== "" &&
+    (form.iban.trim() !== "" || form.paypalLink.trim() !== "");
+
   useEffect(() => {
     async function loadProfile() {
       setIsLoading(true);
       setErrorMessage("");
+      setMessage("");
 
       try {
-        const profile: SupplierProfile = await getSupplierProfile();
+        const profile = await getSupplierProfile();
 
         if (!profile) {
           throw new Error("Leeres Profil vom Server erhalten.");
         }
 
-        setForm({
-          fullName: profile.fullName,
-          email: profile.email,
-          phone: profile.phone ?? "",
-          street: profile.street,
-          houseNumber: profile.houseNumber,
-          postalCode: profile.postalCode,
-          city: profile.city,
-          accountHolder: profile.payment.accountHolder ?? "",
-          iban: profile.payment.iban ?? "",
-          paypalLink: profile.payment.paypalLink ?? "",
-        });
+        setForm(mapProfileToForm(profile));
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -80,10 +104,12 @@ export function SupplierProfilePanel({
       }
     }
 
-    loadProfile();
+    void loadProfile();
   }, []);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setMessage("");
+    setErrorMessage("");
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -93,23 +119,33 @@ export function SupplierProfilePanel({
     setMessage("");
     setErrorMessage("");
 
+    const normalizedFullName =
+      form.fullName.trim() ||
+      [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(" ") ||
+      form.businessName.trim();
+
     const payload: UpdateSupplierProfileInput = {
-      fullName: form.fullName,
-      email: form.email,
-      phone: form.phone || null,
-      street: form.street,
-      houseNumber: form.houseNumber,
-      postalCode: form.postalCode,
-      city: form.city,
+      firstName: form.firstName.trim() || null,
+      lastName: form.lastName.trim() || null,
+      fullName: normalizedFullName,
+      businessName: form.businessName.trim() || null,
+      website: form.website.trim() || null,
+      email: form.email.trim(),
+      phone: form.phone.trim() || null,
+      street: form.street.trim(),
+      houseNumber: form.houseNumber.trim(),
+      postalCode: form.postalCode.trim(),
+      city: form.city.trim(),
       payment: {
-        accountHolder: form.accountHolder || null,
-        iban: form.iban || null,
-        paypalLink: form.paypalLink || null,
+        accountHolder: form.accountHolder.trim() || null,
+        iban: form.iban.trim() || null,
+        paypalLink: form.paypalLink.trim() || null,
       },
     };
 
     try {
-      await updateSupplierProfile(payload);
+      const updatedProfile = await updateSupplierProfile(payload);
+      setForm(mapProfileToForm(updatedProfile));
       setMessage("Profildaten erfolgreich gespeichert.");
     } catch (error) {
       setErrorMessage(
@@ -138,7 +174,8 @@ export function SupplierProfilePanel({
         <div>
           <h2 className="text-xl font-semibold">Lieferantendaten</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Bearbeiten Sie hier Ihre Kontaktdaten und Zahlungsinformationen.
+            Bearbeiten Sie hier Ihre Kontaktdaten, Firmendaten und
+            Zahlungsinformationen.
           </p>
         </div>
 
@@ -162,15 +199,64 @@ export function SupplierProfilePanel({
       ) : null}
 
       <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <label htmlFor="supplier-first-name" className="text-sm font-medium">
+            Vorname
+          </label>
+          <Input
+            id="supplier-first-name"
+            value={form.firstName}
+            onChange={(e) => updateField("firstName", e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="supplier-last-name" className="text-sm font-medium">
+            Nachname
+          </label>
+          <Input
+            id="supplier-last-name"
+            value={form.lastName}
+            onChange={(e) => updateField("lastName", e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label
+            htmlFor="supplier-business-name"
+            className="text-sm font-medium"
+          >
+            Firmenname
+          </label>
+          <Input
+            id="supplier-business-name"
+            value={form.businessName}
+            onChange={(e) => updateField("businessName", e.target.value)}
+            required
+          />
+        </div>
+
         <div className="space-y-2 md:col-span-2">
           <label htmlFor="supplier-full-name" className="text-sm font-medium">
-            Name
+            Anzeigename / Vollständiger Name
           </label>
           <Input
             id="supplier-full-name"
             value={form.fullName}
             onChange={(e) => updateField("fullName", e.target.value)}
-            required
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label htmlFor="supplier-website" className="text-sm font-medium">
+            Website
+          </label>
+          <Input
+            id="supplier-website"
+            type="url"
+            value={form.website}
+            onChange={(e) => updateField("website", e.target.value)}
+            placeholder="https://example.de"
           />
         </div>
 
@@ -289,8 +375,8 @@ export function SupplierProfilePanel({
           />
         </div>
 
-        <div className="md:col-span-2 flex justify-end">
-          <Button type="submit" disabled={isSaving}>
+        <div className="flex justify-end md:col-span-2">
+          <Button type="submit" disabled={isSaving || !isFormValid}>
             {isSaving ? "Speichern..." : "Profildaten speichern"}
           </Button>
         </div>

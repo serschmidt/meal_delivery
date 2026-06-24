@@ -271,20 +271,27 @@ if ($method === 'GET' && $route === 'suppliers/by-delivery-area') {
         exit;
     }
 }
-
 // ------------------------------------------------------------------------------
-// GET /suppliers/{id}/delivery-areas?q=...
+// GET /suppliers/{id}/delivery-areas/search?q=...
 // ------------------------------------------------------------------------------
 
-if ($method === 'GET' && preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas$#', $route, $matches)) {
+if (
+    $method === 'GET' &&
+    preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas/search$#i', $route, $matches)
+) {
     $supplierId = $matches[1];
     $q = trim($_GET['q'] ?? '');
 
     try {
-        jsonResponse(['data' => getSupplierDeliveryAreas($supplierId, $q)]);
+        jsonResponse([
+            'data' => getSupplierDeliveryAreaCheck($supplierId, $q),
+        ], 200);
         exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (RuntimeException $e) {
+        jsonResponse(['error' => $e->getMessage()], 404);
         exit;
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
@@ -386,6 +393,38 @@ if ($method === 'PUT' && preg_match('#^suppliers/([0-9a-f\-]+)$#', $route, $matc
         }
 
         jsonResponse(['data' => $supplier]);
+        exit;
+    } catch (InvalidArgumentException $e) {
+        jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// PATCH suppliers/{id}
+// ------------------------------------------------------------------------------
+if ($method === 'PATCH' && preg_match('#^suppliers/([0-9a-f-]+)$#i', $route, $matches)) {
+    $id = $matches[1];
+
+    try {
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!is_array($data)) {
+            jsonResponse(['error' => 'Invalid JSON', 'jsonError' => json_last_error_msg()], 400);
+            exit;
+        }
+
+        $supplier = patchSupplier($id, $data);
+
+        if ($supplier === null) {
+            jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
+        }
+
+        jsonResponse(['data' => $supplier], 200);
         exit;
     } catch (InvalidArgumentException $e) {
         jsonResponse(['error' => $e->getMessage()], 422);
@@ -699,6 +738,138 @@ if ($method === 'GET' && preg_match('#^customers/([0-9a-f\\-]+)$#', $route, $mat
         jsonResponse(['data' => $customer]);
     } catch (Throwable $e) {
         jsonResponse(['error' => $e->getMessage()], 500);
+    }
+}
+
+// ------------------------------------------------------------------------------
+// GET /suppliers/{id}/delivery-areas
+// ------------------------------------------------------------------------------
+
+if (
+    $method === 'GET' &&
+    preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas$#i', $route, $matches)
+) {
+    $supplierId = $matches[1];
+
+    try {
+        $supplier = getSupplierById($supplierId);
+
+        if ($supplier === null) {
+            jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
+        }
+
+        jsonResponse([
+            'data' => listSupplierDeliveryAreas($supplierId),
+        ], 200);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// POST /suppliers/{id}/delivery-areas
+// ------------------------------------------------------------------------------
+
+if (
+    $method === 'POST' &&
+    preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas$#i', $route, $matches)
+) {
+    $supplierId = $matches[1];
+
+    try {
+        $supplier = getSupplierById($supplierId);
+
+        if ($supplier === null) {
+            jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
+        }
+
+        $data = jsonInput();
+        jsonResponse([
+            'data' => createSupplierDeliveryArea($supplierId, $data),
+        ], 201);
+        exit;
+    } catch (InvalidArgumentException $e) {
+        jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// PATCH /suppliers/{id}/delivery-areas/{areaId}
+// ------------------------------------------------------------------------------
+
+if (
+    $method === 'PATCH' &&
+    preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas/([0-9a-f\-]+)$#i', $route, $matches)
+) {
+    $supplierId = $matches[1];
+    $areaId = $matches[2];
+
+    try {
+        $supplier = getSupplierById($supplierId);
+
+        if ($supplier === null) {
+            jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
+        }
+
+        $data = jsonInput();
+        $updated = updateSupplierDeliveryArea($supplierId, $areaId, $data);
+
+        if ($updated === null) {
+            jsonResponse(['error' => 'Liefergebiet nicht gefunden.'], 404);
+            exit;
+        }
+
+        jsonResponse(['data' => $updated], 200);
+        exit;
+    } catch (InvalidArgumentException $e) {
+        jsonResponse(['error' => $e->getMessage()], 422);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
+    }
+}
+
+// ------------------------------------------------------------------------------
+// DELETE /suppliers/{id}/delivery-areas/{areaId}
+// ------------------------------------------------------------------------------
+
+if (
+    $method === 'DELETE' &&
+    preg_match('#^suppliers/([0-9a-f\-]+)/delivery-areas/([0-9a-f\-]+)$#i', $route, $matches)
+) {
+    $supplierId = $matches[1];
+    $areaId = $matches[2];
+
+    try {
+        $supplier = getSupplierById($supplierId);
+
+        if ($supplier === null) {
+            jsonResponse(['error' => 'Supplier not found'], 404);
+            exit;
+        }
+
+        $deleted = deleteSupplierDeliveryArea($supplierId, $areaId);
+
+        if (!$deleted) {
+            jsonResponse(['error' => 'Liefergebiet nicht gefunden.'], 404);
+            exit;
+        }
+
+        jsonResponse([], 204);
+        exit;
+    } catch (Throwable $e) {
+        jsonResponse(['error' => $e->getMessage()], 500);
+        exit;
     }
 }
 

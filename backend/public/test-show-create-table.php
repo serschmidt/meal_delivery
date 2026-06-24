@@ -1,4 +1,5 @@
 <?php
+// tools/test-show-create-table.php
 
 declare(strict_types=1);
 
@@ -8,11 +9,14 @@ header('Content-Type: text/plain; charset=UTF-8');
 
 $tables = [
     'admins',
+    'addresses',
     'customers',
     'orders',
     'order_items',
-    'addresses',
     'suppliers',
+    'suppliers_payment_details',
+    'supplier_delivery_areas',
+    'supplier_referrals',
     'weekly_menus',
     'weekly_menu_entries',
     'meals',

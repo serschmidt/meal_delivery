@@ -28,8 +28,10 @@ type SupplierApi = {
 
 type Supplier = {
   id: string;
+  firstName?: string | null;
+  lastName?: string | null;
   fullName: string;
-  email: string;
+  businessName?: string | null;  email: string;
   phone: string | null;
   street: string;
   houseNumber: string;
@@ -144,7 +146,7 @@ export function DeliveryPartners() {
 
       {selectedSupplier && (
         <p className="mb-4 text-center text-sm text-muted-foreground">
-          Ausgewählt: {selectedSupplier.fullName}
+          Ausgewählt: {selectedSupplier}
         </p>
       )}
 

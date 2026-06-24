@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/useCart";
+import { useSupplier } from "../contexts/useSupplier";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { apiGet, apiPost } from "../lib/api";
+import { isOrderable } from "../lib/orderability";
 
 type CustomerForm = {
   full_name: string;
@@ -34,11 +36,21 @@ type AddressForm = {
   city: string;
 };
 
+type PaymentQr = {
+  available: boolean;
+  mimeType: string | null;
+  imageBase64: string | null;
+  purpose: string | null;
+};
+
 type OrderResponse = {
   id: string;
   created_at: string;
   status: string;
   total_price: number;
+  supplier_order_number?: number;
+  order_number?: string;
+  payment_qr?: PaymentQr;
   items: {
     id: string;
     meal_name: string;
@@ -58,15 +70,22 @@ type SupplierPayment = {
 type SupplierInfo = {
   id: string;
   fullName: string;
+  businessName?: string | null;
   email: string;
   phone?: string;
   payment?: SupplierPayment;
 };
 
-type DeliveryAreasResponse = {
-  id: string;
-  cities: string[];
-  postal_codes: string[];
+type DeliveryCheckResponse = {
+  supplier?: {
+    id: string;
+    fullName?: string;
+    businessName?: string | null;
+  };
+  deliveryArea?: {
+    cities?: string[];
+    postalCodes?: string[];
+  };
 };
 
 function normalizePostalCode(value: string) {
@@ -85,8 +104,22 @@ function formatDate(dateStr: string) {
   });
 }
 
+function getOrderDisplayNumber(order: OrderResponse) {
+  if (order.order_number?.trim()) {
+    return order.order_number.trim();
+  }
+
+  if (order.supplier_order_number && order.created_at) {
+    const year = new Date(order.created_at).getFullYear();
+    return `${year}-${order.supplier_order_number}`;
+  }
+
+  return null;
+}
+
 export function CheckoutPage() {
-  const { cartItems, clearCart } = useCart();
+  const { cartItems, clearCart, removeItemsBy } = useCart();
+  const { selectedSupplier } = useSupplier();
   const navigate = useNavigate();
 
   const [customer, setCustomer] = useState<CustomerForm>({
@@ -126,7 +159,9 @@ export function CheckoutPage() {
     city: customer.city.trim(),
   };
 
-  const normalizedBillingPostalCode = normalizePostalCode(billingAddress.postal_code);
+  const normalizedBillingPostalCode = normalizePostalCode(
+    billingAddress.postal_code,
+  );
 
   const effectiveBillingAddress: AddressForm = sameAsDelivery
     ? deliveryAddress
@@ -139,13 +174,29 @@ export function CheckoutPage() {
 
   const totalAmount = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
-    0
+    0,
   );
 
-  const supplierId = cartItems[0]?.supplierId ?? null;
-  const supplierName = cartItems[0]?.supplierName ?? null;
+  const supplierId = selectedSupplier?.id ?? null;
+  const supplierName =
+    selectedSupplier?.businessName?.trim() ||
+    selectedSupplier?.fullName?.trim() ||
+    null;
 
   const areRequiredCheckboxesAccepted = widerrufsAccepted && phoneAccepted;
+
+  const totalAllCompletedOrders = useMemo(
+    () => completedOrders.reduce((sum, order) => sum + order.total_price, 0),
+    [completedOrders],
+  );
+
+  const completedOrderNumbers = useMemo(
+    () =>
+      completedOrders
+        .map((order) => getOrderDisplayNumber(order))
+        .filter((value): value is string => Boolean(value)),
+    [completedOrders],
+  );
 
   const handleCustomerChange = (field: keyof CustomerForm, value: string) => {
     setCustomer((prev) => ({ ...prev, [field]: value }));
@@ -158,12 +209,10 @@ export function CheckoutPage() {
   const isFormValid = () => {
     const billingValid =
       sameAsDelivery ||
-      (
-        billingAddress.street.trim() !== "" &&
+      (billingAddress.street.trim() !== "" &&
         billingAddress.house_number.trim() !== "" &&
         billingAddress.city.trim() !== "" &&
-        isGermanPostalCode(normalizedBillingPostalCode)
-      );
+        isGermanPostalCode(normalizedBillingPostalCode));
 
     return (
       customer.full_name.trim() !== "" &&
@@ -184,9 +233,26 @@ export function CheckoutPage() {
       return;
     }
 
+    const invalidCartItems = cartItems.filter(
+      (item) => !isOrderable(item.deliveryDate),
+    );
+
+    if (invalidCartItems.length > 0) {
+      removeItemsBy((item) => !isOrderable(item.deliveryDate));
+
+      toast.warning("Warenkorb wurde aktualisiert", {
+        description:
+          invalidCartItems.length === 1
+            ? "Eine nicht mehr bestellbare Mahlzeit wurde aus dem Warenkorb entfernt. Bitte prüfen Sie Ihre Bestellung."
+            : `${invalidCartItems.length} nicht mehr bestellbare Mahlzeiten wurden aus dem Warenkorb entfernt. Bitte prüfen Sie Ihre Bestellung.`,
+      });
+
+      return;
+    }
+
     if (!widerrufsAccepted || !phoneAccepted) {
       toast.error(
-        "Bitte aktivieren Sie beide Checkboxen, bevor Sie die Bestellung absenden."
+        "Bitte aktivieren Sie beide Checkboxen, bevor Sie die Bestellung absenden.",
       );
       return;
     }
@@ -198,13 +264,16 @@ export function CheckoutPage() {
 
     if (!isGermanPostalCode(normalizedDeliveryPostalCode)) {
       toast.error(
-        "Bitte geben Sie eine gültige 5-stellige PLZ für die Lieferadresse ein."
+        "Bitte geben Sie eine gültige 5-stellige PLZ für die Lieferadresse ein.",
       );
       return;
     }
 
     if (!supplierId) {
-      toast.error("Kein Lieferant ausgewählt.");
+      toast.error("Kein Liefergebiet ausgewählt.", {
+        description:
+          "Bitte wählen Sie zuerst ein gültiges Liefergebiet aus, bevor Sie die Bestellung absenden.",
+      });
       return;
     }
 
@@ -215,32 +284,32 @@ export function CheckoutPage() {
         acc[key].push(item);
         return acc;
       },
-      {}
+      {},
     );
 
     setIsSubmitting(true);
 
     try {
-      const deliveryAreas = await apiGet<DeliveryAreasResponse>(
-        `suppliers/${supplierId}/delivery-areas`,
-        { q: normalizedDeliveryPostalCode }
+      const deliveryCheck = await apiGet<DeliveryCheckResponse>(
+        `suppliers/${supplierId}/delivery-areas/search`,
+        { q: normalizedDeliveryPostalCode },
       );
 
-      const postalCodes = Array.isArray(deliveryAreas?.postal_codes)
-        ? deliveryAreas.postal_codes
+      const postalCodes = Array.isArray(deliveryCheck?.deliveryArea?.postalCodes)
+        ? deliveryCheck.deliveryArea.postalCodes
         : [];
 
       const normalizedPostalCodes = postalCodes.map((code) =>
-        normalizePostalCode(code)
+        normalizePostalCode(code),
       );
 
       const isPostalCodeAllowed = normalizedPostalCodes.includes(
-        normalizedDeliveryPostalCode
+        normalizedDeliveryPostalCode,
       );
 
       if (!isPostalCodeAllowed) {
         toast.error(
-          "Die angegebene Liefer-PLZ liegt nicht im Liefergebiet dieses Anbieters."
+          "Die angegebene Liefer-PLZ liegt nicht im Liefergebiet dieses Anbieters.",
         );
         return;
       }
@@ -290,9 +359,24 @@ export function CheckoutPage() {
   };
 
   if (orderSuccess) {
-    const totalAll = completedOrders.reduce((s, o) => s + o.total_price, 0);
     const hasIban = !!supplierInfo?.payment?.iban;
     const hasPaypal = !!supplierInfo?.payment?.paypalLink;
+
+    const singleOrderNumber =
+      completedOrders.length === 1
+        ? getOrderDisplayNumber(completedOrders[0])
+        : null;
+
+    const paymentReference =
+      completedOrders.length === 1 && singleOrderNumber
+        ? `Bestellung ${singleOrderNumber}`
+        : null;
+
+    const paymentRecipient =
+      supplierInfo?.businessName ??
+      supplierInfo?.fullName ??
+      supplierInfo?.payment?.accountHolder ??
+      "–";
 
     return (
       <div className="mx-auto max-w-2xl space-y-6 py-8">
@@ -311,62 +395,95 @@ export function CheckoutPage() {
           </p>
         </div>
 
-        {completedOrders.map((order, i) => (
-          <section key={order.id} className="space-y-4 rounded-lg border p-6">
-            <h2 className="text-lg font-semibold">
-              Bestellung {completedOrders.length > 1 ? i + 1 : ""}
-            </h2>
+        {completedOrders.map((order, i) => {
+          const orderDisplayNumber = getOrderDisplayNumber(order);
 
-            <div className="space-y-1 rounded-md bg-muted/50 px-4 py-3 text-sm">
-              <p>
-                <span className="font-medium">Lieferant:</span>{" "}
-                {supplierInfo?.fullName ?? "–"}
-              </p>
-              <p>
-                <span className="font-medium">Lieferzeit:</span> täglich
-                zwischen 11:00 und 13:30 Uhr
-              </p>
-              <p>
-                <span className="font-medium">Status:</span> {order.status}
-              </p>
-            </div>
+          return (
+            <section key={order.id} className="space-y-4 rounded-lg border p-6">
+              <h2 className="text-lg font-semibold">
+                Bestellung {completedOrders.length > 1 ? i + 1 : ""}
+              </h2>
 
-            <div className="space-y-2">
-              {order.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-start justify-between text-sm"
-                >
-                  <div>
-                    <span>
-                      {item.quantity}× {item.meal_name}
+              <div className="space-y-1 rounded-md bg-muted/50 px-4 py-3 text-sm">
+                {orderDisplayNumber && (
+                  <p>
+                    <span className="font-medium">Bestellnummer:</span>{" "}
+                    <span className="font-mono">{orderDisplayNumber}</span>
+                  </p>
+                )}
+                <p>
+                  <span className="font-medium">Lieferant:</span>{" "}
+                  {supplierInfo?.businessName ?? supplierInfo?.fullName ?? "–"}
+                </p>
+                <p>
+                  <span className="font-medium">Lieferzeit:</span> täglich
+                  zwischen 11:00 und 13:30 Uhr
+                </p>
+                <p>
+                  <span className="font-medium">Status:</span> {order.status}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {order.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-start justify-between text-sm"
+                  >
+                    <div>
+                      <span>
+                        {item.quantity}× {item.meal_name}
+                      </span>
+                      {item.menu_date && (
+                        <p className="text-xs text-muted-foreground">
+                          Liefertag: {formatDate(item.menu_date)}
+                        </p>
+                      )}
+                    </div>
+                    <span className="shrink-0 pl-4">
+                      € {item.line_total.toFixed(2)}
                     </span>
-                    {item.menu_date && (
-                      <p className="text-xs text-muted-foreground">
-                        Liefertag: {formatDate(item.menu_date)}
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between font-semibold">
+                <span>Teilsumme</span>
+                <span>€ {order.total_price.toFixed(2)}</span>
+              </div>
+
+              {order.payment_qr?.available &&
+                order.payment_qr.imageBase64 &&
+                order.payment_qr.mimeType && (
+                  <div className="rounded-lg border bg-muted/30 p-4 text-center">
+                    <p className="mb-2 text-sm font-medium">
+                      QR-Code für die Überweisung dieser Bestellung
+                    </p>
+                    <img
+                      src={`data:${order.payment_qr.mimeType};base64,${order.payment_qr.imageBase64}`}
+                      alt={`QR-Code für Bestellung ${getOrderDisplayNumber(order) ?? order.id}`}
+                      className="mx-auto h-[220px] w-[220px] rounded-md bg-white p-2"
+                    />
+                    {order.payment_qr.purpose && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Verwendungszweck:{" "}
+                        <span className="font-mono">
+                          {order.payment_qr.purpose}
+                        </span>
                       </p>
                     )}
                   </div>
-                  <span className="shrink-0 pl-4">
-                    € {item.line_total.toFixed(2)}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between font-semibold">
-              <span>Teilsumme</span>
-              <span>€ {order.total_price.toFixed(2)}</span>
-            </div>
-          </section>
-        ))}
+                )}
+            </section>
+          );
+        })}
 
         {completedOrders.length > 1 && (
           <div className="flex items-center justify-between rounded-lg border p-4 text-lg font-bold">
             <span>Gesamtsumme</span>
-            <span>€ {totalAll.toFixed(2)}</span>
+            <span>€ {totalAllCompletedOrders.toFixed(2)}</span>
           </div>
         )}
 
@@ -377,11 +494,8 @@ export function CheckoutPage() {
             <div className="space-y-2 rounded-md bg-muted/50 px-4 py-3 text-sm">
               <p className="font-medium">Überweisung</p>
               <p>
-                <span className="text-muted-foreground">Kontoinhaber: </span>
-                <span className="font-medium">
-                  {supplierInfo?.payment?.accountHolder ??
-                    supplierInfo?.fullName}
-                </span>
+                <span className="text-muted-foreground">Empfänger: </span>
+                <span className="font-medium">{paymentRecipient}</span>
               </p>
               <p>
                 <span className="text-muted-foreground">IBAN: </span>
@@ -391,8 +505,34 @@ export function CheckoutPage() {
               </p>
               <p>
                 <span className="text-muted-foreground">Betrag: </span>
-                <span className="font-bold">€ {totalAll.toFixed(2)}</span>
+                <span className="font-bold">
+                  € {totalAllCompletedOrders.toFixed(2)}
+                </span>
               </p>
+
+              {paymentReference && (
+                <p>
+                  <span className="text-muted-foreground">
+                    Verwendungszweck:{" "}
+                  </span>
+                  <span className="font-mono font-bold">
+                    {paymentReference}
+                  </span>
+                </p>
+              )}
+
+              {!paymentReference && completedOrderNumbers.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Bestellnummern:</p>
+                  <ul className="space-y-1">
+                    {completedOrderNumbers.map((orderNumber) => (
+                      <li key={orderNumber} className="font-mono font-medium">
+                        {orderNumber}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -462,10 +602,10 @@ export function CheckoutPage() {
     return (
       <div className="mx-auto max-w-2xl space-y-4 py-12 text-center">
         <div className="text-5xl">⚠</div>
-        <h1 className="text-2xl font-bold">Kein Lieferant ausgewählt</h1>
+        <h1 className="text-2xl font-bold">Kein Liefergebiet ausgewählt</h1>
         <p className="text-muted-foreground">
-          Bitte wählen Sie zuerst einen Lieferanten aus, bevor Sie zur Kasse
-          gehen.
+          Bitte wählen Sie zuerst ein gültiges Liefergebiet aus, bevor Sie zur
+          Kasse gehen.
         </p>
         <Button onClick={() => navigate("/")}>Zurück zur Startseite</Button>
       </div>
@@ -512,7 +652,7 @@ export function CheckoutPage() {
         <div className="space-y-2">
           {cartItems.map((item) => (
             <div
-              key={`${item.mealId}-${item.supplierId}`}
+              key={`${item.weeklyMenuEntryId}-${item.mealId}`}
               className="flex items-start justify-between text-sm"
             >
               <div>
@@ -748,7 +888,8 @@ export function CheckoutPage() {
             htmlFor="phoneAccepted"
             className="cursor-pointer font-normal leading-5"
           >
-            Ich bin einverstanden, dass Sie mich telefonisch kontaktieren dürfen.
+            Ich bin einverstanden, dass Sie mich telefonisch kontaktieren
+            dürfen.
           </Label>
         </div>
 

@@ -8,9 +8,13 @@ export type SupplierPayment = {
 
 export type SupplierProfile = {
   id: string;
+  firstName?: string | null;
+  lastName?: string | null;
   fullName: string;
+  businessName?: string | null;
   email: string;
   phone: string | null;
+  website?: string | null;
   street: string;
   houseNumber: string;
   postalCode: string;
@@ -22,7 +26,11 @@ export type SupplierProfile = {
 };
 
 export type UpdateSupplierProfileInput = {
+  firstName?: string | null;
+  lastName?: string | null;
   fullName: string;
+  businessName?: string | null;
+  website?: string | null;
   email: string;
   phone: string | null;
   street: string;
@@ -40,10 +48,10 @@ export async function getSupplierProfile(): Promise<SupplierProfile> {
 export async function updateSupplierProfile(
   input: UpdateSupplierProfileInput,
 ): Promise<SupplierProfile> {
-  const response = await apiPatch<{ data: SupplierProfile }, UpdateSupplierProfileInput>(
-    "supplier/profile",
-    input,
-  );
+  const response = await apiPatch<
+    { data: SupplierProfile },
+    UpdateSupplierProfileInput
+  >("supplier/profile", input);
   return response.data;
 }
 

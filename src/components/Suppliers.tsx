@@ -3,38 +3,16 @@ import { CheckCircle2, Search, XCircle } from "lucide-react";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { useSupplier } from "../contexts/useSupplier";
+import type { Supplier } from "../contexts/SupplierContext";
 import { apiGet } from "../lib/api";
 import { cn } from "@/lib/utils";
 
-type SupplierAddress = {
-  street: string;
-  houseNumber: string;
-  postalCode: string;
-  city: string;
-};
-
-type SupplierPayment = {
-  accountHolder: string | null;
-  iban: string | null;
-  paypalLink: string | null;
-};
-
-type Supplier = {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  address: SupplierAddress;
-  payment: SupplierPayment;
-};
-
-type DeliveryAreasResponse = {
-  id: string;
-  cities: string[];
-  postal_codes: string[];
+type DeliveryAreaResult = {
+  supplier: Supplier;
+  deliveryArea: {
+    cities: string[];
+    postalCodes: string[];
+  };
 };
 
 type SuppliersProps = {
@@ -45,8 +23,6 @@ type SuppliersProps = {
 function hasMinimumSearchLength(value: string) {
   return value.trim().length >= 3;
 }
-
-let initialSupplierRequestStarted = false;
 
 export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
   const { selectedSupplier, selectSupplier } = useSupplier();
@@ -59,53 +35,21 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
   const trimmedSearch = useMemo(() => searchValue.trim(), [searchValue]);
   const canSearch = hasMinimumSearchLength(trimmedSearch);
 
-  useEffect(() => {
-    if (initialSupplierRequestStarted) return;
-    initialSupplierRequestStarted = true;
+  const supplierDisplayName = useMemo(() => {
+    if (!selectedSupplier) return "";
 
-    const controller = new AbortController();
-
-    const loadInitialSupplier = async () => {
-      try {
-        const suppliers = await apiGet<Supplier[]>(
-          "suppliers/all",
-          undefined,
-          controller.signal,
-        );
-
-        const firstSupplier = Array.isArray(suppliers)
-          ? (suppliers[0] ?? null)
-          : null;
-        selectSupplier(firstSupplier);
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return;
-        }
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Fehler beim Laden des Liefergebiets.",
-        );
-      }
-    };
-
-    void loadInitialSupplier();
-
-    return () => {
-      controller.abort();
-    };
-  }, [selectSupplier]);
+    return (
+      selectedSupplier.businessName?.trim() ||
+      selectedSupplier.fullName?.trim() ||
+      [selectedSupplier.firstName, selectedSupplier.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim()
+    );
+  }, [selectedSupplier]);
 
   useEffect(() => {
     const controller = new AbortController();
-
-    if (!selectedSupplier?.id) {
-      setCitySuggestions([]);
-      setDeliveryMatch(null);
-      setIsSearching(false);
-      return () => controller.abort();
-    }
 
     if (trimmedSearch === "") {
       setCitySuggestions([]);
@@ -128,16 +72,22 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
         setError("");
         setIsSearching(true);
 
-        const response = await apiGet<DeliveryAreasResponse>(
-          `suppliers/${selectedSupplier.id}/delivery-areas`,
+        const response = await apiGet<DeliveryAreaResult | null>(
+          "suppliers/by-delivery-area",
           { q: trimmedSearch },
           controller.signal,
         );
 
-        const uniqueCities = Array.isArray(response?.cities)
+        if (!response?.supplier) {
+          setCitySuggestions([]);
+          setDeliveryMatch(false);
+          return;
+        }
+
+        const uniqueCities = Array.isArray(response.deliveryArea?.cities)
           ? Array.from(
               new Map(
-                response.cities.map((city) => [
+                response.deliveryArea.cities.map((city) => [
                   city.trim().toLowerCase(),
                   city,
                 ]),
@@ -145,10 +95,11 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
             )
           : [];
 
-        const postalCodes = Array.isArray(response?.postal_codes)
-          ? response.postal_codes
+        const postalCodes = Array.isArray(response.deliveryArea?.postalCodes)
+          ? response.deliveryArea.postalCodes
           : [];
 
+        selectSupplier(response.supplier);
         setCitySuggestions(uniqueCities);
         setDeliveryMatch(uniqueCities.length > 0 || postalCodes.length > 0);
       } catch (err) {
@@ -172,7 +123,7 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [trimmedSearch, canSearch, selectedSupplier?.id]);
+  }, [trimmedSearch, canSearch, selectSupplier]);
 
   const showSuggestions =
     trimmedSearch !== "" &&
@@ -204,6 +155,15 @@ export function Suppliers({ searchValue, onSearchChange }: SuppliersProps) {
               Geben Sie mindestens 3 Buchstaben oder 3 Zahlen ein, um das
               Liefergebiet zu prüfen.
             </p>
+
+            {supplierDisplayName && (
+              <p className="text-sm text-muted-foreground">
+                Aktiver Lieferant:{" "}
+                <span className="font-medium text-foreground">
+                  {supplierDisplayName}
+                </span>
+              </p>
+            )}
           </div>
 
           <div className="relative">

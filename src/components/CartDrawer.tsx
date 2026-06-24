@@ -64,7 +64,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
           {selectedSupplier ? (
             <p className="text-sm">
               <span className="text-muted-foreground">Lieferant: </span>
-              <span className="font-medium">{selectedSupplier.fullName}</span>
+              <span className="font-medium">{selectedSupplier.businessName}</span>
             </p>
           ) : (
             <p className="text-sm text-destructive">
@@ -98,7 +98,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
 
                       {items.map((item) => (
                         <div
-                          key={`${item.mealId}-${item.supplierId ?? "guest"}`}
+                          key={`${item.mealId}`}
                           className="rounded-lg border p-4"
                         >
                           <div className="flex items-start justify-between gap-3">
